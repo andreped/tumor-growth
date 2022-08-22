@@ -19,3 +19,8 @@ A total of 30 volumes have been (pseudo-randomly) picked at different timestamps
 * Raw volume: ground truth volume in ml, obtained after automatic segmentation and manual refinement (from Johanna/Kathrine).
 * Per volume: same as above but from Per as annotator.
 * Dice: Dice score between the two annotated volumes.
+
+
+## Implementation setup
+To perform the statistical analysis data was preprocessed in Python 3.7.9 using pandas and numpy.
+Regression analysis were conducted in R-4.2.1 for Windows through the rpy2 tool in Python.
