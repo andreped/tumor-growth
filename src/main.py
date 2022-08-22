@@ -117,6 +117,14 @@ def preprocess(data_path):
     print(full_data)
     print(full_data.head(30))
 
+    # remove all occurences where Volumes=0 (not possible!)
+    filter_ = full_data["Volumes"] != str(0.0)
+    full_data_nonzero = full_data[filter_]
+
+    print("\nRemoved all volumes=0 incidents:")
+    print(full_data_nonzero.head(30))
+    print("\nold vs new shape after filtering:", full_data.shape, full_data_nonzero.shape)
+
     ### Make scatter plots and fit curve (regression)
     # - 1) test linear regression
     #model = sm.GLM(np.array(full_data.Volumes).astype(float), pd.get_dummies(full_data.Gender))  # , family=sm.families.Gamma())
