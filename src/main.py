@@ -14,6 +14,8 @@ from lmfit import Minimizer, Parameters, report_fit
 stats = importr('stats')
 base = importr('base')
 nlme = importr('nlme')
+car = importr('car')
+outliers = importr('outliers')
 pandas2ri.activate()
 R = ro.r
 
@@ -108,7 +110,7 @@ def preprocess(data_path):
     # need to filter NaN volumes on merged data frame
     full_data = full_data[full_data.Volumes != 0]
 
-    # reset indeces in full_data to go 0:1:N
+    # reset indices in full_data to go 0:1:N
     full_data.index = list(range(len(full_data)))
 
     # add patient characteristics to full data frame
@@ -123,7 +125,7 @@ def preprocess(data_path):
             full_data.loc[r, 'Birth_Year'] = byear_new_format
             full_data.loc[r, 'Gender'] = gender
 
-    # remove all occurences where Volumes=0 (not possible!)
+    # remove all occurences where Volumes=0 (not possible -> tumor was not annotated)
     filter_zero_volumes = full_data["Volumes"] != str(0.0)
     full_data_nonzero = full_data[filter_zero_volumes]
 
@@ -136,42 +138,47 @@ def preprocess(data_path):
     relative_difference_between_scans = full_data_nonzero["Date"] - full_data_nonzero["First_Timestamp_Date"]
     relative_difference_between_scans = relative_difference_between_scans.dt.days
     full_data_nonzero["Relative_Days_Difference"] = relative_difference_between_scans.astype("float32")
+    full_data_nonzero["Follow_Up_Months"] = relative_difference_between_scans.astype("float32") / 30
 
     # get relative volume ratios between scans
     relative_volume_ratio = full_data_nonzero["Volumes"] / full_data_nonzero["Initial_Volume"]
-    full_data_nonzero["Relative_Volume_Ratio"] = relative_volume_ratio
+    full_data_nonzero["Relative_Volume_Ratio"] = relative_volume_ratio.astype("float32")
 
     # @TODO: Should normalize the variables in some way to avoid exploding stuff issues
     #   - perhaps age in years (instead of in days) make more sense?
 
-    # remove all Volumes = 0
-    filter_ = volumes > 0
-    x_filtered = x[filter_]
-    y_filtered = y[filter_]
-    gender_filtered = gender[filter_]
-    age_filtered = age[filter_]
+    print(full_data_nonzero)
 
-    # new simplified, filtered data frame
-    gender_study_df = pd.DataFrame({
-        "gender": gender_filtered,
-        "Relative_Volume_Ratio": y_filtered,
-        "Relative_Days_Difference": x_filtered,
-        "age": age_filtered
+    # capture outliers and remove them - assuming normality using quantiles
+    lower = R.quantile(full_data_nonzero["Relative_Volume_Ratio"], 0.025)[0]
+    higher = R.quantile(full_data_nonzero["Relative_Volume_Ratio"], 0.975)[0]
+
+    x = np.array(full_data_nonzero["Relative_Volume_Ratio"])
+    filter_ = (x > lower) & (x < higher)
+    full_data_nonzero = full_data_nonzero[filter_]
+
+    tmp_df = pd.DataFrame({
+        "Relative_Volume_Ratio": full_data_nonzero["Relative_Volume_Ratio"],
+        "Follow_Up_Months": full_data_nonzero["Follow_Up_Months"],
+        "Gender": full_data_nonzero["Gender"],
     })
 
     # test linear regression
-    model = R.lm('Relative_Volume_Ratio ~ Relative_Days_Difference + factor(gender)', data=gender_study_df)
+    model = R.lm('Relative_Volume_Ratio ~ Follow_Up_Months + factor(Gender)', data=tmp_df)
     summary_model = R.summary(model)
     print(summary_model)  # .rx2('coefficients'))
+    print("ANOVA:")
+    print(R.anova(model))
 
-    exit()
+    #exit()
 
     # get (x, y) variables for both genders
-    gender_study_df_man = gender_study_df[gender_filtered == "man"]
-    gender_study_df_woman = gender_study_df[gender_filtered == "woman"]
+    gender_study_df_man = tmp_df[tmp_df["Gender"] == "man"]
+    gender_study_df_woman = tmp_df[tmp_df["Gender"] == "woman"]
 
     # make regression curves for each gender
-    #model_man = R.lm("Relative_Volume_Ratio ~ Relative_Days_Difference", data=gender_study_df_man)
+    model_man = R.lm("Relative_Volume_Ratio ~ Follow_Up_Months", data=gender_study_df_man)
+    model_woman = R.lm("Relative_Volume_Ratio ~ Follow_Up_Months", data=gender_study_df_woman)
     # summary_man = R.summary(model_man)
     #R.abline(model_man)
     # print(summary_man)
@@ -185,11 +192,24 @@ def preprocess(data_path):
     print("R^2 | AIC | BIC:", summary_model.rx2("adj.r.squared")[0], aic_, bic_)
 
     # sns.scatterplot(x=x_filtered, y=y_filtered, data=full_data_nonzero)
-    sns.scatterplot(x="Relative_Days_Difference", y="Relative_Volume_Ratio", hue="Gender",
+    sns.scatterplot(x="Follow_Up_Months", y="Relative_Volume_Ratio", hue="Gender",
                     data=full_data_nonzero, legend=True)
-    # sns.lineplot(x=[min(x_filtered), max(x_filtered)], y=[0, 0], palette="g")
+    sns.lineplot(x=[min(full_data_nonzero["Follow_Up_Months"]), max(full_data_nonzero["Follow_Up_Months"])], y=[1, 1],
+                 palette="g")
     plt.grid("on")
     plt.tight_layout()
+
+    print(len(model.rx2('fitted.values')))
+    print(len(full_data_nonzero["Relative_Days_Difference"]))
+
+    # draw regression curves
+    plt.plot(full_data_nonzero["Follow_Up_Months"], model.rx2('fitted.values'), 'k')
+
+    # plot regression curves for both genders
+    plt.plot(gender_study_df_man["Follow_Up_Months"], model_man.rx2('fitted.values'), 'b')
+    plt.plot(gender_study_df_woman["Follow_Up_Months"], model_woman.rx2('fitted.values'), 'r')
+
+    # show figure
     plt.show()
 
     exit()
