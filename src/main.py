@@ -10,11 +10,10 @@ import matplotlib.pyplot as plt
 from lmfit import Minimizer, Parameters, report_fit
 
 
+# R-related imports
 stats = importr('stats')
 base = importr('base')
 nlme = importr('nlme')
-
-
 pandas2ri.activate()
 R = ro.r
 
@@ -45,19 +44,6 @@ def preprocess(data_path):
     print(filtered_cohort_volumes_quality)
     print(filtered_volumes)
 
-    # remove all volumes that has NaN values - use same filter for all relevant tables
-    # filtered_volumes = filtered_volumes.dropna(subset=["Volume"])
-    #nan_filter_ = filtered_volumes["Volume"].isnull()
-
-    # now, we use filter to remove (patient, timestamp) pair in other dataset
-    #print(nan_filter_)
-    #curr_volume_df = filtered_volumes[nan_filter_]
-    #print(curr_volume_df)
-
-    #exit()
-
-    #exit()
-
     # 1) First assumption (lets sum all fragmented tumors together into one - total tumor volume in patient,
     #  for each time point). Use cohort volumes quality to catch all patients and time points
     data = []
@@ -71,23 +57,16 @@ def preprocess(data_path):
         # get unique timestamps
         curr_timestamps = curr_data["Timestamp"]
         curr_timestamps = list(curr_timestamps)
-        #print(curr_timestamps)
-        #continue
+
         unique_timestamps = np.unique(list(curr_timestamps))
         unique_timestamps = sort_timestamps(unique_timestamps)
 
         # get earliest timestamp with non-NaN volume
-        non_nan_happened = False
         for t in unique_timestamps:
             tmp = curr_data[curr_data["Timestamp"] == t]
             curr_v = np.array(tmp["Volume"]).astype("float32")
-            #print(tmp)
-            #print(pd.isnull(curr_v))
-            #print(curr_v)
             curr_v = sum(curr_v)
-            #print(curr_v)
             if not pd.isnull(curr_v):
-                #print("VALUE WAS NOT NaN!! Breaking...")
                 break
         init_timestamp = t
 
@@ -113,9 +92,6 @@ def preprocess(data_path):
 
             # translate current date to datetime format
             curr_date = str2datetime(curr_date)
-
-            # translate current date to year
-            #curr_date = int(curr_date.split("-")[0])
 
             data.append([pat, timestamp, initial_volume, first_timestamp_date, curr_date, curr_volume])
             iter += 1
