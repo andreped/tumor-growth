@@ -1,24 +1,22 @@
 import pandas as pd
 import os
 import numpy as np
-from utils import sort_timestamps, remove_surgery_patients, plot_graphs
+from utils import sort_timestamps, remove_surgery_patients, plot_graphs, str2datetime, get_earliest_timestamp
 import seaborn as sns
 from rpy2 import robjects as ro
 from rpy2.robjects import pandas2ri
+from rpy2.robjects.packages import importr
 import matplotlib.pyplot as plt
-from datetime import datetime
+from lmfit import Minimizer, Parameters, report_fit
+
+
+stats = importr('stats')
+base = importr('base')
+nlme = importr('nlme')
 
 
 pandas2ri.activate()
 R = ro.r
-
-
-def translate_date_to_years(data):
-    return
-
-
-def str2datetime(str_):
-    return datetime.strptime(str_, '%Y-%m-%d')
 
 
 def preprocess(data_path):
@@ -47,6 +45,19 @@ def preprocess(data_path):
     print(filtered_cohort_volumes_quality)
     print(filtered_volumes)
 
+    # remove all volumes that has NaN values - use same filter for all relevant tables
+    # filtered_volumes = filtered_volumes.dropna(subset=["Volume"])
+    #nan_filter_ = filtered_volumes["Volume"].isnull()
+
+    # now, we use filter to remove (patient, timestamp) pair in other dataset
+    #print(nan_filter_)
+    #curr_volume_df = filtered_volumes[nan_filter_]
+    #print(curr_volume_df)
+
+    #exit()
+
+    #exit()
+
     # 1) First assumption (lets sum all fragmented tumors together into one - total tumor volume in patient,
     #  for each time point). Use cohort volumes quality to catch all patients and time points
     data = []
@@ -60,12 +71,33 @@ def preprocess(data_path):
         # get unique timestamps
         curr_timestamps = curr_data["Timestamp"]
         curr_timestamps = list(curr_timestamps)
+        #print(curr_timestamps)
+        #continue
         unique_timestamps = np.unique(list(curr_timestamps))
         unique_timestamps = sort_timestamps(unique_timestamps)
 
-        # get date of first timestamp of patient
-        first_timestamp_date = curr_data[curr_data["Timestamp"] == "T1"]["Date"]
+        # get earliest timestamp with non-NaN volume
+        non_nan_happened = False
+        for t in unique_timestamps:
+            tmp = curr_data[curr_data["Timestamp"] == t]
+            curr_v = np.array(tmp["Volume"]).astype("float32")
+            #print(tmp)
+            #print(pd.isnull(curr_v))
+            #print(curr_v)
+            curr_v = sum(curr_v)
+            #print(curr_v)
+            if not pd.isnull(curr_v):
+                #print("VALUE WAS NOT NaN!! Breaking...")
+                break
+        init_timestamp = t
+
+        # get date of first timestamp of patient (T1 might not be the earliest!! If T1 is NaN, then T2 might be, etc.
+        first_timestamp_date = curr_data[curr_data["Timestamp"] == init_timestamp]["Date"]
         first_timestamp_date = str2datetime(np.asarray(first_timestamp_date)[0])
+
+        # get initial volume size at first scan
+        initial_volume = curr_data[curr_data["Timestamp"] == init_timestamp]["Volume"]
+        initial_volume = np.asarray(initial_volume)[0]
 
         # for each time stamp, all clusters and sum these into one value (total tumor amount in ml)
         for timestamp in unique_timestamps:
@@ -85,101 +117,59 @@ def preprocess(data_path):
             # translate current date to year
             #curr_date = int(curr_date.split("-")[0])
 
-            data.append([pat, timestamp, first_timestamp_date, curr_date, curr_volume])
+            data.append([pat, timestamp, initial_volume, first_timestamp_date, curr_date, curr_volume])
             iter += 1
     data = np.array(data)
 
     # merge this with the cohort volumes quality stuff
-    #full_data = np.concatenate([filtered_cohort_volumes_quality, data[:, 2:3]], axis=1)
     full_data = filtered_cohort_volumes_quality.copy()
-    full_data["Volumes"] = data[:, -1].astype(float)
+
+    full_data["Volumes"] = data[:, -1].astype("float32")
     full_data["Date"] = data[:, -2]
     full_data["First_Timestamp_Date"] = data[:, -3]
+    full_data["Initial_Volume"] = data[:, -4].astype("float32")
 
-    # indeces = full_data.index
+    # need to filter NaN volumes on merged data frame
+    full_data = full_data[full_data.Volumes != 0]
+
+    # reset indeces in full_data to go 0:1:N
+    full_data.index = list(range(len(full_data)))
 
     # add patient characteristics to full data frame
     full_data["Birth_Year"] = (-999 * np.ones(full_data.shape[0])).astype("str")
     full_data["Gender"] = (-999 * np.ones(full_data.shape[0])).astype("str")
     for pat, gender, byear in zip(cohort_personal_info_filtered["Patient"], cohort_personal_info_filtered["Gender"], cohort_personal_info_filtered["Birth_Year"]):
         row_ids = np.where(full_data["Patient"] == pat)[0]
-        #if type(row_ids) is not list():
-        #    row_ids = [row_ids]
-        #print(full_data["Patient"] == pat)
-        #print("row ids:", row_ids)
         for r in row_ids:
             byear_new_format = str(byear) + "-07-01"
             byear_new_format = str2datetime(byear_new_format)
 
-            #print("r:", r)
-            full_data.loc[r + 60, 'Birth_Year'] = byear_new_format  # @FIXME: Need better solution, quick-fix: 60 off in row ID...
-            full_data.loc[r + 60, 'Gender'] = gender
-
-    print(full_data.shape)
-    print(full_data.head(30))
+            full_data.loc[r, 'Birth_Year'] = byear_new_format
+            full_data.loc[r, 'Gender'] = gender
 
     # remove all occurences where Volumes=0 (not possible!)
     filter_zero_volumes = full_data["Volumes"] != str(0.0)
     full_data_nonzero = full_data[filter_zero_volumes]
 
-    print("\nold vs new shape after filtering:", full_data.shape, full_data_nonzero.shape)
-    del full_data  # sanity check, to avoid using the wrong volume
-
-    print("\nRemoved all volumes=0 incidents:")
-    print(full_data_nonzero.head(30))
-
     # get current age at scan and add to data frame
-    print(full_data_nonzero["Date"])
-    print(full_data_nonzero["Birth_Year"])
-
     curr_age_at_scan = full_data_nonzero["Date"] - full_data_nonzero["Birth_Year"]
     curr_age_at_scan = curr_age_at_scan.dt.days
-    print(curr_age_at_scan)
-
-    # curr_age_at_scan = full_data_nonzero["Date"].astype(int) - full_data_nonzero["Birth_Year"].astype(int)
-    print(curr_age_at_scan)
     full_data_nonzero["Current_Age"] = curr_age_at_scan.astype(float)
 
-    print(full_data_nonzero.head(30))
-
     # get relative difference in days between scans
-    print(full_data_nonzero["First_Timestamp_Date"])
     relative_difference_between_scans = full_data_nonzero["Date"] - full_data_nonzero["First_Timestamp_Date"]
     relative_difference_between_scans = relative_difference_between_scans.dt.days
-    print(relative_difference_between_scans)
+    full_data_nonzero["Relative_Days_Difference"] = relative_difference_between_scans.astype("float32")
 
-    full_data_nonzero["Relative_Days_Difference"] = relative_difference_between_scans
-
-    print(full_data_nonzero.head(30))
-
-    ### Make scatter plots and fit curve (regression)
-    # - 1) test linear regression
-    #model = sm.GLM(np.array(full_data.Volumes).astype(float), pd.get_dummies(full_data.Gender))  # , family=sm.families.Gamma())
-    #results = model.fit()
-    #print(results.summary())
-
-    # - 1) Regression modelling using rpy2 to run R code from Python
-    #model = R.lm('Volumes ~ Current_Age', data=full_data_nonzero)
-    #print(R.summary(model))  # .rx2('coefficients'))
-
-    # - Plot scatter plot
-
-    # sns.scatterplot(x="Relative_Days_Difference", y="Volumes", data=full_data_nonzero, hue="Gender", legend=True)
-    #current_age = np.asarray(full_data_nonzero["Current_Age"]).astype(float)
-    #vols = np.asarray(full_data_nonzero["Volumes"]).astype(float)
-    #sns.scatterplot(x=list(range(len(vols))), y=vols)
-    #x = sns.scatterplot(x=current_age, y=vols)
-    #x.set_xlabel("he")
-
-    x = np.asarray(full_data_nonzero["Relative_Days_Difference"])
-    y = np.asarray(full_data_nonzero["Volumes"])
-    gender = np.asarray(full_data_nonzero["Gender"])
-    age = np.asarray(full_data_nonzero["Current_Age"])
+    # get relative volume ratios between scans
+    relative_volume_ratio = full_data_nonzero["Volumes"] / full_data_nonzero["Initial_Volume"]
+    full_data_nonzero["Relative_Volume_Ratio"] = relative_volume_ratio
 
     # @TODO: Should normalize the variables in some way to avoid exploding stuff issues
     #   - perhaps age in years (instead of in days) make more sense?
 
-    filter_ = y > 0
+    # remove all Volumes = 0
+    filter_ = volumes > 0
     x_filtered = x[filter_]
     y_filtered = y[filter_]
     gender_filtered = gender[filter_]
@@ -188,10 +178,45 @@ def preprocess(data_path):
     # new simplified, filtered data frame
     gender_study_df = pd.DataFrame({
         "gender": gender_filtered,
-        "Volumes": y_filtered,
+        "Relative_Volume_Ratio": y_filtered,
         "Relative_Days_Difference": x_filtered,
         "age": age_filtered
     })
+
+    # test linear regression
+    model = R.lm('Relative_Volume_Ratio ~ Relative_Days_Difference + factor(gender)', data=gender_study_df)
+    summary_model = R.summary(model)
+    print(summary_model)  # .rx2('coefficients'))
+
+    exit()
+
+    # get (x, y) variables for both genders
+    gender_study_df_man = gender_study_df[gender_filtered == "man"]
+    gender_study_df_woman = gender_study_df[gender_filtered == "woman"]
+
+    # make regression curves for each gender
+    #model_man = R.lm("Relative_Volume_Ratio ~ Relative_Days_Difference", data=gender_study_df_man)
+    # summary_man = R.summary(model_man)
+    #R.abline(model_man)
+    # print(summary_man)
+    #exit()
+
+
+    # get goodness of fit measures (AIC, Mallows Cp, R^2)
+    aic_ = stats.AIC(model)[0]
+    bic_ = stats.BIC(model)[0]
+
+    print("R^2 | AIC | BIC:", summary_model.rx2("adj.r.squared")[0], aic_, bic_)
+
+    # sns.scatterplot(x=x_filtered, y=y_filtered, data=full_data_nonzero)
+    sns.scatterplot(x="Relative_Days_Difference", y="Relative_Volume_Ratio", hue="Gender",
+                    data=full_data_nonzero, legend=True)
+    # sns.lineplot(x=[min(x_filtered), max(x_filtered)], y=[0, 0], palette="g")
+    plt.grid("on")
+    plt.tight_layout()
+    plt.show()
+
+    exit()
 
     # apply log to y
     y_log_filtered = np.log(y_filtered)
@@ -208,12 +233,13 @@ def preprocess(data_path):
     print(mu_y_log_man)
     print(mu_y_log_woman)
 
-    sns.scatterplot(
-        x=x_filtered,
-        y=y_log_filtered,
-        hue=gender_filtered,
-        legend=True
-    )
+    # print(gender_study_df.head(60))
+    print(full_data)
+    exit()
+    exit()
+
+    #sns.scatterplot(x=x_filtered, y=y_log_filtered, hue=gender_filtered, legend=True)
+    #plt.show()
     # -> looks like white noise (but appears to be some trends). Should apply
 
     #sns.lineplot(x=[min(x_filtered), max(x_filtered)], y=[mu_y_log_man, mu_y_log_man])
@@ -223,10 +249,35 @@ def preprocess(data_path):
 
     # perform linear regression to get coefficients
     # @TODO: lm or glm?
-    model = R.lm('log(Volumes) ~ Relative_Days_Difference * age + factor(gender)', data=gender_study_df)
-    print(R.summary(model))  # .rx2('coefficients'))
+    model = R.lm('log(Relative_Volume_Ratio) ~ Relative_Days_Difference * age + factor(gender)', data=gender_study_df)
+    summary = R.summary(model)
+    coeffs = summary.rx2("coefficients")
+    print(summary)  # .rx2('coefficients'))
 
+    # Build a DataFrame from the coefficients tables
+    #print(coeffs.names)
+    #result = pd.DataFrame(pandas2ri.py2ri(coeffs), index=coeffs.names[0], columns=coeffs.names[1])
+    #print(result)
+
+    # Non-linear regression using lmfit (Python package)
+
+
+    # Gompertzian growth curve
+
+    sns.scatterplot(x=gender_study_df["Relative_Days_Difference"], y=gender_study_df["Relative_Volume_Ratio"],
+                    hue=gender_filtered, legend=True)
     plt.show()
+
+    # @TODO: Challenging to set good initial values - optimization just fails...
+    gender_study_df['a'] = 1.0
+    gender_study_df['b'] = 13.0
+    gender_study_df['c'] = 0.09
+    startvector = ro.ListVector({'a': 1.0, 'b': 13.0, 'c': 0.09})
+    gomp_formula = stats.as_formula('Volumes ~ a * exp(b * exp(c * Relative_Days_Difference))')
+    # gomp_model = nlme.nls('Volumes ~ SSgompertz(Relative_Days_Difference,)')
+    gomp_model = stats.nls(gomp_formula, data=gender_study_df, start=startvector)
+
+    print(gomp_model)
 
 
 if __name__ == "__main__":

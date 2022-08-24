@@ -1,11 +1,18 @@
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 
 def sort_timestamps(input_):
     tmp = np.array([int(x[1:]) for x in input_])
     return input_[np.argsort(tmp)]
+
+
+def get_earliest_timestamp(input_):
+    print([int(x[1:]) for x in input_])
+    value = min([int(x[1:]) for x in input_])
+    return "T" + str(value)
 
 
 def remove_surgery_patients(patients):
@@ -33,3 +40,8 @@ def plot_graphs(data):
     #plt.ylabel('PM2.5 (µg/m3)')
     #plt.xlabel('Year-Month')
     plt.show()
+
+
+def str2datetime(str_):
+    return datetime.strptime(str_, '%Y-%m-%d')
+
