@@ -9,7 +9,6 @@ from rpy2.robjects.packages import importr
 import matplotlib.pyplot as plt
 from lmfit import Minimizer, Parameters, report_fit
 
-
 # R-related imports
 stats = importr('stats')
 base = importr('base')
@@ -116,7 +115,8 @@ def preprocess(data_path):
     # add patient characteristics to full data frame
     full_data["Birth_Year"] = (-999 * np.ones(full_data.shape[0])).astype("str")
     full_data["Gender"] = (-999 * np.ones(full_data.shape[0])).astype("str")
-    for pat, gender, byear in zip(cohort_personal_info_filtered["Patient"], cohort_personal_info_filtered["Gender"], cohort_personal_info_filtered["Birth_Year"]):
+    for pat, gender, byear in zip(cohort_personal_info_filtered["Patient"], cohort_personal_info_filtered["Gender"],
+                                  cohort_personal_info_filtered["Birth_Year"]):
         row_ids = np.where(full_data["Patient"] == pat)[0]
         for r in row_ids:
             byear_new_format = str(byear) + "-07-01"
@@ -147,7 +147,7 @@ def preprocess(data_path):
     # @TODO: Should normalize the variables in some way to avoid exploding stuff issues
     #   - perhaps age in years (instead of in days) make more sense?
 
-    print(full_data_nonzero)
+    print(full_data_nonzero.head(40))
 
     # capture outliers and remove them - assuming normality using quantiles
     lower = R.quantile(full_data_nonzero["Relative_Volume_Ratio"], 0.025)[0]
@@ -157,8 +157,16 @@ def preprocess(data_path):
     filter_ = (x > lower) & (x < higher)
     full_data_nonzero = full_data_nonzero[filter_]
 
+    # filter patients that show no growth?
+
+
+
+    # create new, tuned data frame for doing statistics
     tmp_df = pd.DataFrame({
+        "Patient": full_data_nonzero["Patient"],
+        "Volumes": full_data_nonzero["Volumes"],
         "Relative_Volume_Ratio": full_data_nonzero["Relative_Volume_Ratio"],
+        "Log_Relative_Volume_Ratio": np.log(full_data_nonzero["Relative_Volume_Ratio"]),
         "Follow_Up_Months": full_data_nonzero["Follow_Up_Months"],
         "Gender": full_data_nonzero["Gender"],
     })
@@ -170,7 +178,11 @@ def preprocess(data_path):
     print("ANOVA:")
     print(R.anova(model))
 
-    #exit()
+    # exit()
+
+    print("Test if data is Normal using Shapiro-Wilk (univariate test):")
+    print(stats.shapiro_test(tmp_df["Relative_Volume_Ratio"]).rx2('p.value')[0])
+    # ->H0: Normality. p-value is significant. Data is NOT normal!
 
     # get (x, y) variables for both genders
     gender_study_df_man = tmp_df[tmp_df["Gender"] == "man"]
@@ -180,10 +192,9 @@ def preprocess(data_path):
     model_man = R.lm("Relative_Volume_Ratio ~ Follow_Up_Months", data=gender_study_df_man)
     model_woman = R.lm("Relative_Volume_Ratio ~ Follow_Up_Months", data=gender_study_df_woman)
     # summary_man = R.summary(model_man)
-    #R.abline(model_man)
+    # R.abline(model_man)
     # print(summary_man)
-    #exit()
-
+    # exit()
 
     # get goodness of fit measures (AIC, Mallows Cp, R^2)
     aic_ = stats.AIC(model)[0]
@@ -192,10 +203,12 @@ def preprocess(data_path):
     print("R^2 | AIC | BIC:", summary_model.rx2("adj.r.squared")[0], aic_, bic_)
 
     # sns.scatterplot(x=x_filtered, y=y_filtered, data=full_data_nonzero)
-    sns.scatterplot(x="Follow_Up_Months", y="Relative_Volume_Ratio", hue="Gender",
-                    data=full_data_nonzero, legend=True)
-    sns.lineplot(x=[min(full_data_nonzero["Follow_Up_Months"]), max(full_data_nonzero["Follow_Up_Months"])], y=[1, 1],
-                 palette="g")
+    # sns.scatterplot(x="Follow_Up_Months", y="Relative_Volume_Ratio", hue="Gender",
+    #                data=full_data_nonzero, legend=True)
+    sns.lineplot(x="Follow_Up_Months", y="Volumes", hue="Patient",
+                 data=tmp_df, legend=True)
+    # sns.lineplot(x=[min(full_data_nonzero["Follow_Up_Months"]), max(full_data_nonzero["Follow_Up_Months"])], y=[1, 1],
+    #             palette="g")
     plt.grid("on")
     plt.tight_layout()
 
@@ -203,11 +216,11 @@ def preprocess(data_path):
     print(len(full_data_nonzero["Relative_Days_Difference"]))
 
     # draw regression curves
-    plt.plot(full_data_nonzero["Follow_Up_Months"], model.rx2('fitted.values'), 'k')
+    # plt.plot(full_data_nonzero["Follow_Up_Months"], model.rx2('fitted.values'), 'k')
 
     # plot regression curves for both genders
-    plt.plot(gender_study_df_man["Follow_Up_Months"], model_man.rx2('fitted.values'), 'b')
-    plt.plot(gender_study_df_woman["Follow_Up_Months"], model_woman.rx2('fitted.values'), 'r')
+    # plt.plot(gender_study_df_man["Follow_Up_Months"], model_man.rx2('fitted.values'), 'b')
+    # plt.plot(gender_study_df_woman["Follow_Up_Months"], model_woman.rx2('fitted.values'), 'r')
 
     # show figure
     plt.show()
@@ -232,14 +245,13 @@ def preprocess(data_path):
     # print(gender_study_df.head(60))
     print(full_data)
     exit()
-    exit()
 
-    #sns.scatterplot(x=x_filtered, y=y_log_filtered, hue=gender_filtered, legend=True)
-    #plt.show()
+    # sns.scatterplot(x=x_filtered, y=y_log_filtered, hue=gender_filtered, legend=True)
+    # plt.show()
     # -> looks like white noise (but appears to be some trends). Should apply
 
-    #sns.lineplot(x=[min(x_filtered), max(x_filtered)], y=[mu_y_log_man, mu_y_log_man])
-    #sns.lineplot(x=[min(x_filtered), max(x_filtered)], y=[mu_y_log_woman, mu_y_log_woman])
+    # sns.lineplot(x=[min(x_filtered), max(x_filtered)], y=[mu_y_log_man, mu_y_log_man])
+    # sns.lineplot(x=[min(x_filtered), max(x_filtered)], y=[mu_y_log_woman, mu_y_log_woman])
 
     # @FIXME: Probably interaction between "Relative_Days_Difference" and "age"
 
@@ -251,12 +263,11 @@ def preprocess(data_path):
     print(summary)  # .rx2('coefficients'))
 
     # Build a DataFrame from the coefficients tables
-    #print(coeffs.names)
-    #result = pd.DataFrame(pandas2ri.py2ri(coeffs), index=coeffs.names[0], columns=coeffs.names[1])
-    #print(result)
+    # print(coeffs.names)
+    # result = pd.DataFrame(pandas2ri.py2ri(coeffs), index=coeffs.names[0], columns=coeffs.names[1])
+    # print(result)
 
     # Non-linear regression using lmfit (Python package)
-
 
     # Gompertzian growth curve
 
