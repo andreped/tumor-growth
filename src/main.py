@@ -71,13 +71,30 @@ def preprocess(data_path):
                 break
         init_timestamp = t
 
+        # get last timestamp with non-NaN volume
+        for t in unique_timestamps[::-1]:  # reversed ordered timestamp list
+            tmp = curr_data[curr_data["Timestamp"] == t]
+            curr_v = np.array(tmp["Volume"]).astype("float32")
+            curr_v = sum(curr_v)
+            if not pd.isnull(curr_v):
+                break
+        last_timestamp = t
+
         # get date of first timestamp of patient (T1 might not be the earliest!! If T1 is NaN, then T2 might be, etc.
         first_timestamp_date = curr_data[curr_data["Timestamp"] == init_timestamp]["Date"]
         first_timestamp_date = str2datetime(np.asarray(first_timestamp_date)[0])
 
+        # get last timestamp
+        last_timestamp_date = curr_data[curr_data["Timestamp"] == last_timestamp]["Date"]
+        last_timestamp_date = str2datetime(np.asarray(last_timestamp_date)[0])
+
         # get initial volume size at first scan
         initial_volume = curr_data[curr_data["Timestamp"] == init_timestamp]["Volume"]
         initial_volume = np.asarray(initial_volume)[0]
+
+        # get final volume size at last scan
+        last_volume = curr_data[curr_data["Timestamp"] == last_timestamp]["Volume"]
+        last_volume = np.asarray(last_volume)[0]
 
         # for each time stamp, all clusters and sum these into one value (total tumor amount in ml)
         for timestamp in unique_timestamps:
@@ -94,20 +111,23 @@ def preprocess(data_path):
             # translate current date to datetime format
             curr_date = str2datetime(curr_date)
 
-            data.append([pat, timestamp, initial_volume, first_timestamp_date, curr_date, curr_volume])
+            data.append([pat, timestamp, initial_volume, last_volume, first_timestamp_date, last_timestamp_date,
+                         curr_date, curr_volume])
             iter += 1
     data = np.array(data)
 
     # merge this with the cohort volumes quality stuff
     full_data = filtered_cohort_volumes_quality.copy()
 
-    full_data["Volumes"] = data[:, -1].astype("float32")
+    full_data["Volume"] = data[:, -1].astype("float32")
     full_data["Date"] = data[:, -2]
-    full_data["First_Timestamp_Date"] = data[:, -3]
-    full_data["Initial_Volume"] = data[:, -4].astype("float32")
+    full_data["Last_Timestamp_Date"] = data[:, -3]
+    full_data["First_Timestamp_Date"] = data[:, -4]
+    full_data["Final_Volume"] = data[:, -5].astype("float32")
+    full_data["Initial_Volume"] = data[:, -6].astype("float32")
 
     # need to filter NaN volumes on merged data frame
-    full_data = full_data[full_data.Volumes != 0]
+    full_data = full_data[full_data.Volume != 0]
 
     # reset indices in full_data to go 0:1:N
     full_data.index = list(range(len(full_data)))
@@ -126,7 +146,7 @@ def preprocess(data_path):
             full_data.loc[r, 'Gender'] = gender
 
     # remove all occurences where Volumes=0 (not possible -> tumor was not annotated)
-    filter_zero_volumes = full_data["Volumes"] != str(0.0)
+    filter_zero_volumes = full_data["Volume"] != str(0.0)
     full_data_nonzero = full_data[filter_zero_volumes]
 
     # get current age at scan and add to data frame
@@ -141,7 +161,7 @@ def preprocess(data_path):
     full_data_nonzero["Follow_Up_Months"] = relative_difference_between_scans.astype("float32") / 30
 
     # get relative volume ratios between scans
-    relative_volume_ratio = full_data_nonzero["Volumes"] / full_data_nonzero["Initial_Volume"]
+    relative_volume_ratio = full_data_nonzero["Volume"] / full_data_nonzero["Initial_Volume"]
     full_data_nonzero["Relative_Volume_Ratio"] = relative_volume_ratio.astype("float32")
 
     # @TODO: Should normalize the variables in some way to avoid exploding stuff issues
@@ -157,14 +177,17 @@ def preprocess(data_path):
     filter_ = (x > lower) & (x < higher)
     full_data_nonzero = full_data_nonzero[filter_]
 
-    # filter patients that show no growth?
-
+    # filter patients that show no growth? - how to determine if tumor has grown?
+    # Look at first and last timestep volume size?
+    volume_change = full_data_nonzero["Final_Volume"] - full_data_nonzero["Initial_Volume"]
+    print(volume_change)
+    exit()
 
 
     # create new, tuned data frame for doing statistics
     tmp_df = pd.DataFrame({
         "Patient": full_data_nonzero["Patient"],
-        "Volumes": full_data_nonzero["Volumes"],
+        "Volume": full_data_nonzero["Volume"],
         "Relative_Volume_Ratio": full_data_nonzero["Relative_Volume_Ratio"],
         "Log_Relative_Volume_Ratio": np.log(full_data_nonzero["Relative_Volume_Ratio"]),
         "Follow_Up_Months": full_data_nonzero["Follow_Up_Months"],
