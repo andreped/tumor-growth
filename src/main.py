@@ -1,13 +1,19 @@
 import pandas as pd
 import os
 import numpy as np
-from utils import sort_timestamps, remove_surgery_patients, plot_graphs, str2datetime, get_earliest_timestamp
+from utils import sort_timestamps, remove_surgery_patients, plot_graphs, str2datetime, get_earliest_timestamp,\
+    calculate_volumetric_diameter, get_last_timestamp
 import seaborn as sns
 from rpy2 import robjects as ro
 from rpy2.robjects import pandas2ri
 from rpy2.robjects.packages import importr
 import matplotlib.pyplot as plt
 from lmfit import Minimizer, Parameters, report_fit
+from tableone import TableOne
+import scipy
+import statsmodels.api as sm
+
+
 
 # R-related imports
 stats = importr('stats')
@@ -17,6 +23,67 @@ car = importr('car')
 outliers = importr('outliers')
 pandas2ri.activate()
 R = ro.r
+
+
+def study_inter_rater_variability(data_path):
+    interrater_variability_study = pd.read_csv(os.path.join(data_path, "interrater_variability_study.csv"))
+
+    print(interrater_variability_study)
+
+    volume = interrater_variability_study["Raw volume"]
+    dice = interrater_variability_study.Dice
+
+    print(volume)
+    print(dice)
+
+    x = interrater_variability_study["Raw volume"].astype("float32")
+    y = interrater_variability_study["Per volume"].astype("float32")
+
+    mu = np.mean([x, y], axis=0)
+    diff = x - y
+    md = np.mean(diff)
+    sd = np.std(diff, axis=0)
+
+    print(md, sd)
+    print(mu - 1.96 * sd, mu + 1.96 * sd)
+
+    # outlier detection
+    outliers = (diff > md + 1.96 * sd) | (diff < md - 1.96 * sd)
+    outliers = np.array(outliers)
+
+    print(diff > md + 1.96 * sd)
+    print(outliers)
+    print(sum(outliers))
+
+    x = np.array(x)
+    y = np.array(y)
+
+    x_filtered = x[np.logical_not(outliers)]
+    y_filtered = y[np.logical_not(outliers)]
+
+    # redo bland-altman plot
+    mu = np.mean([x_filtered, y_filtered], axis=0)
+    diff = x_filtered - y_filtered
+    md = np.mean(diff)
+    sd = np.std(diff, axis=0)
+
+    plt.scatter(mu, diff)
+    plt.axhline(md, color='gray', linestyle='--')
+    plt.axhline(md + 1.96 * sd, color='gray', linestyle='--')
+    plt.axhline(md - 1.96 * sd, color='gray', linestyle='--')
+
+    # print((diff < md - 1.96 * sd) or (diff > md + 1.96 * sd))
+
+    plt.title('Bland-Altman Plot')
+    plt.show()
+
+    #sns.scatterplot(x, y)
+    #plt.show()
+
+
+def get_patient_characteristics(data_path):
+    cohort_personal_info = pd.read_csv(os.path.join(data_path, "cohort_personal_info.csv"))
+    print(cohort_personal_info)
 
 
 def preprocess(data_path):
@@ -96,6 +163,9 @@ def preprocess(data_path):
         last_volume = curr_data[curr_data["Timestamp"] == last_timestamp]["Volume"]
         last_volume = np.asarray(last_volume)[0]
 
+        # counter number of timestamps
+        nb_timestamps = len(curr_data["Timestamp"])
+
         # for each time stamp, all clusters and sum these into one value (total tumor amount in ml)
         for timestamp in unique_timestamps:
             # get volume for current timestamp - if mulitple, sum these (total tumor volume)
@@ -111,8 +181,8 @@ def preprocess(data_path):
             # translate current date to datetime format
             curr_date = str2datetime(curr_date)
 
-            data.append([pat, timestamp, initial_volume, last_volume, first_timestamp_date, last_timestamp_date,
-                         curr_date, curr_volume])
+            data.append([pat, timestamp, nb_timestamps, initial_volume, last_volume, first_timestamp_date,
+                         last_timestamp_date, curr_date, curr_volume])
             iter += 1
     data = np.array(data)
 
@@ -125,6 +195,7 @@ def preprocess(data_path):
     full_data["First_Timestamp_Date"] = data[:, -4]
     full_data["Final_Volume"] = data[:, -5].astype("float32")
     full_data["Initial_Volume"] = data[:, -6].astype("float32")
+    full_data["Number_Of_Timestamps"] = data[:, -7].astype("float32")
 
     # need to filter NaN volumes on merged data frame
     full_data = full_data[full_data.Volume != 0]
@@ -181,6 +252,161 @@ def preprocess(data_path):
     # Look at first and last timestep volume size?
     volume_change = full_data_nonzero["Final_Volume"] - full_data_nonzero["Initial_Volume"]
     print(volume_change)
+
+    # remove patients with slice thickness higher or equal than X
+    # slice_thickness_filter = np.array(full_data_nonzero["Spacing3"]) < 2
+    # full_data_nonzero = full_data_nonzero[slice_thickness_filter]
+
+    # print(full_data_nonzero.shape)
+
+    # exit()
+
+    # create summary statistics for study - Table 1
+    full_data_nonzero["Current_Age_Years"] = np.array(full_data_nonzero["Current_Age"]).astype("float32") / 365.25
+
+    patient_filter_ = full_data_nonzero["Timestamp"] == "T1"
+    # @TODO: After removing volumes with 0 size, some T1 points are now missing
+
+    age_at_T1 = np.array(full_data_nonzero["Current_Age"][patient_filter_]).astype("float32") / 365.25
+    genders = np.array(full_data_nonzero["Gender"][patient_filter_])
+    init_volume_size = np.array(full_data_nonzero["Volume"][patient_filter_])
+    number_of_mri_scans = np.array(full_data_nonzero["Number_Of_Timestamps"][patient_filter_])
+    slice_thickness = np.array(full_data_nonzero["Spacing3"][patient_filter_])
+
+    patients = np.unique(full_data_nonzero["Patient"])
+    total_follow_up_days = []
+    for patient in patients:
+        curr = full_data_nonzero[full_data_nonzero["Patient"] == patient]["Relative_Days_Difference"]
+        total_follow_up_days.append(max(curr))
+    total_follow_up_months = np.array(total_follow_up_days) / 30
+
+    # @TODO: Which threshold to use? Base it on measurements error (largest error, quantiles?) in
+    #   inter-rater variability study?
+    #   - might be that 15% is better, from looking at the inter-rater variability, but not sure
+    relative_growth_threshold = 0.15
+
+    volume_change = []
+    volume_change_relative = []
+    volume_grew = []
+    volume_shrank = []
+    volume_no_change = []
+    for patient in patients:
+        curr = full_data_nonzero[full_data_nonzero["Patient"] == patient]
+        first_timestamp = get_earliest_timestamp(curr["Timestamp"])
+        last_timestamp = get_last_timestamp(curr["Timestamp"])
+        initial_size = np.array(curr[curr["Timestamp"] == first_timestamp]["Volume"])
+        final_size = np.array(curr[curr["Timestamp"] == last_timestamp]["Volume"])
+
+        relative_change = (final_size - initial_size) / initial_size
+
+        #print()
+        #print(curr["Timestamp"])
+        #print(last_timestamp)
+        #print(initial_size)
+        #print(final_size)
+        initial_size = float(initial_size)
+        final_size = float(final_size)
+        volume_change.append(final_size - initial_size)
+        volume_change_relative.append(relative_change)
+
+        if relative_change > relative_growth_threshold:
+            volume_grew.append([patient, initial_size, relative_change])
+        elif relative_change < - relative_growth_threshold:
+            volume_shrank.append([patient, initial_size, relative_change])
+        else:
+            volume_no_change.append([patient, initial_size, relative_change])
+
+    volume_change = np.array(volume_change)
+    volume_change_relative = np.array(volume_change_relative)
+
+    print(full_data_nonzero)
+    N = len(age_at_T1)
+    # print(age_at_T1)
+    print("age: median/IQR/min/max:", np.round(np.median(age_at_T1), 1), np.round(scipy.stats.iqr(age_at_T1), 1),
+          np.round(np.min(age_at_T1), 1), np.round(np.max(age_at_T1), 1))
+    print("gender (count/%):", sum(genders == "woman"), np.mean(genders == "woman"))
+    print("initial volume size at T1: (median/IQR/min/max):", np.round(np.median(init_volume_size), 1),
+          np.round(scipy.stats.iqr(init_volume_size), 1), np.round(np.min(init_volume_size), 1),
+          np.round(np.max(init_volume_size), 1))
+    print("number of MRI scans per patient: (median/IQR/min/max):", np.round(np.median(number_of_mri_scans), 1),
+          np.round(scipy.stats.iqr(number_of_mri_scans), 1), np.round(np.min(number_of_mri_scans), 1),
+          np.round(np.max(number_of_mri_scans), 1))
+    print("total follow up in months: (median/IQR/min/max):", np.round(np.median(total_follow_up_months), 1),
+          np.round(scipy.stats.iqr(total_follow_up_months), 1), np.round(np.min(total_follow_up_months), 1),
+          np.round(np.max(total_follow_up_months), 1))
+    print("volume change (T1 to T-last): (median/IQR/min/max):", np.round(np.median(volume_change), 1),
+          np.round(scipy.stats.iqr(volume_change), 1), np.round(np.min(volume_change), 1),
+          np.round(np.max(volume_change), 1))
+    print("relative volume change (T1 to T-last): (median/IQR/min/max):", np.round(np.median(volume_change_relative), 3),
+          np.round(scipy.stats.iqr(volume_change_relative), 3), np.round(np.min(volume_change_relative), 3),
+          np.round(np.max(volume_change_relative), 3))
+    print("number of patients with tumors that grew/no change/shrank:",
+          len(volume_grew), len(volume_no_change), len(volume_shrank), "| % |",
+          np.round(len(volume_grew) / N, 3),
+          np.round(len(volume_no_change) / N, 3),
+          np.round(len(volume_shrank) / N), 3)
+    print("slice thickness: (median/IQR/min/max):",
+          np.round(np.median(slice_thickness), 3),
+          np.round(scipy.stats.iqr(slice_thickness), 3), np.round(np.min(slice_thickness), 3),
+          np.round(np.max(slice_thickness), 3))
+
+
+    # Correlation between tumor volume at diagnosis and tumor growth?
+    volume_grew = np.array(volume_grew)
+    volume_shrank = np.array(volume_shrank)
+    volume_no_change = np.array(volume_no_change)
+
+    #print("TUMOR GREW | relative volume change (T1 to T-last): (median/IQR/min/max):",
+    #      np.round(np.median(volume_grew[:, ]), 3),
+    #      np.round(scipy.stats.iqr(volume_grew), 3), np.round(np.min(volume_grew), 3),
+    #      np.round(np.max(volume_grew), 3))
+
+    print(len(init_volume_size))
+    print(len(volume_change_relative))
+
+    print("correlation between tumor volume at diagnosis and tumor growth:",
+          scipy.stats.pearsonr(init_volume_size, volume_change_relative))
+
+    exit()
+
+    '''
+    print("\n\n\n")
+    print("#" * 30)
+    print()
+    print(full_data_nonzero)
+    print()
+    print(list(full_data_nonzero.keys()))
+    print(full_data_nonzero.columns)
+
+    full_data_nonzero["Current_Age_Years"] = np.array(full_data_nonzero["Current_Age"]).astype("float32") / 365.25
+
+    table_ = TableOne(
+        data=full_data_nonzero,
+        columns=["Current_Age_Years", "Gender", "Initial_Volume", "Volume", "Final_Volume",
+                 "Follow_Up_Months", "Spacing1", "Spacing3"],
+        categorical=["Gender"],
+        # nonnormal=["Current_Age"],
+        rename={"Current_Age_Years": "Age",
+                "Initial_Volume": "Initial Volume",
+                "Final Volume": "Final Volume",
+                "Follow_Up_Months": "Follow Up Months",
+                "Spacing1": "Image resolution",
+                "Spacing3": "Slab thickness"},
+        pval=False,
+    )
+
+    print(table_.tabulate(tablefmt="fancy_grid"))
+
+    exit()
+    '''
+
+    print()
+    print(full_data_nonzero["Current_Age_Years"])
+    # tmp = np.array(full_data_nonzero["Current_Age_Years"])
+    tmp = np.array(full_data_nonzero["Number_Of_Timestamps"].astype("int32"))
+    print(np.unique(tmp, return_counts=True))
+    print("mu/std/IQR:", np.mean(tmp), np.std(tmp), scipy.stats.iqr(tmp, axis=0))
+
     exit()
 
 
@@ -313,3 +539,8 @@ def preprocess(data_path):
 if __name__ == "__main__":
     data_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/")
     preprocess(data_path)
+    # study_inter_rater_variability(data_path)
+
+    # get patient summary statistics
+    # get_patient_characteristics(data_path)
+
