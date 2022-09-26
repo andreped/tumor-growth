@@ -10,9 +10,14 @@ def sort_timestamps(input_):
 
 
 def get_earliest_timestamp(input_):
-    print([int(x[1:]) for x in input_])
     value = min([int(x[1:]) for x in input_])
     return "T" + str(value)
+
+
+def get_last_timestamp(input_):
+    value = max([int(x[1:]) for x in input_])
+    return "T" + str(value)
+
 
 
 def remove_surgery_patients(patients):
@@ -45,3 +50,6 @@ def plot_graphs(data):
 def str2datetime(str_):
     return datetime.strptime(str_, '%Y-%m-%d')
 
+
+def calculate_volumetric_diameter(volume):
+    return (6 * volume / np.pi) ** (1 / 3)
