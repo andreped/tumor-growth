@@ -269,12 +269,12 @@ def preprocess(data_path):
     print(full_data_nonzero.head(40))
 
     # capture outliers and remove them - assuming normality using quantiles
-    lower = R.quantile(full_data_nonzero["Relative_Volume_Ratio"], 0.025)[0]
-    higher = R.quantile(full_data_nonzero["Relative_Volume_Ratio"], 0.975)[0]
+    #lower = R.quantile(full_data_nonzero["Relative_Volume_Ratio"], 0.025)[0]
+    #higher = R.quantile(full_data_nonzero["Relative_Volume_Ratio"], 0.975)[0]
 
-    x = np.array(full_data_nonzero["Relative_Volume_Ratio"])
-    filter_ = (x > lower) & (x < higher)
-    full_data_nonzero = full_data_nonzero[filter_]
+    #x = np.array(full_data_nonzero["Relative_Volume_Ratio"])
+    #filter_ = (x > lower) & (x < higher)
+    #full_data_nonzero = full_data_nonzero[filter_]
 
     # filter patients that show no growth? - how to determine if tumor has grown?
     # Look at first and last timestep volume size?
@@ -292,11 +292,13 @@ def preprocess(data_path):
     # create summary statistics for study - Table 1
     full_data_nonzero["Current_Age_Years"] = np.array(full_data_nonzero["Current_Age"]).astype("float32") / 365.25
 
-    patient_filter_ = full_data_nonzero["Timestamp"] == "T1"
-    # @TODO: After removing volumes with 0 size, some T1 points are now missing
+    # patient_filter_ = full_data_nonzero["Timestamp"] == "T1"
+    # @TODO: After removing volumes with 0 size, some T1 points are now missing (FIXED BELOW)
+    patient_filter_ = np.array(full_data_nonzero["Earliest_Timestamp"]) == 1
 
     # age_at_T1 = np.array(full_data_nonzero["Current_Age"][patient_filter_]).astype("float32") / 365.25
     genders = np.array(full_data_nonzero["Gender"][patient_filter_])
+
     # init_volume_size = np.array(full_data_nonzero["Volume"][patient_filter_])
     number_of_mri_scans = np.array(full_data_nonzero["Number_Of_Timestamps"][patient_filter_])
     slice_thickness = np.array(full_data_nonzero["Spacing3"][patient_filter_])
@@ -458,6 +460,35 @@ def preprocess(data_path):
 
     #sm.qqplot(volume_change_relative, line='45')
     #plt.show()
+
+    print(list(full_data_nonzero.keys()))
+
+    print("counts:")
+    print(len(patients))
+    print(len(genders))
+    print(len(init_volume_size))
+    print(len(age_at_T1))
+    print(len(volume_change))
+
+    # create temporary dataframe to store data relevant for statistical analysis
+    df_association = pd.DataFrame({
+        "volume_change": volume_change,
+        "init_volume_size": init_volume_size,
+        "age_at_T1": age_at_T1,
+        "total_follow_up_months": total_follow_up_months,
+        #"T2": full_data_nonzero["T2"],
+        "genders": genders,
+        #"Spacing3": full_data_nonzero["Spacing3"],
+    })
+
+    # As data is not normal, we use a non-parametric test to assess association between different dependent variables
+    # against tumor growth.
+    # We could use regular ANOVA, which is known to be quite robust against deviations from Normality, but just to be
+    # safe, lets just perform a Kruskal Wallis test instead.
+
+    result = stats.kruskal_test(stats.as_formula('volume_change ~ age_at_T1'), data=df_association)
+
+    print(result)
 
 
 
