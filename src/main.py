@@ -310,14 +310,16 @@ def preprocess(data_path):
     number_of_mri_scans = np.array(full_data_nonzero["Number_Of_Timestamps"][patient_filter_])
     slice_thickness = np.array(full_data_nonzero["Spacing3"][patient_filter_])
 
-    t2_hyperintense = np.array(full_data_nonzero["T2"][patient_filter_])
-    t2_hyperintense = t2_hyperintense[t2_hyperintense != '-999.0']
-    t2_hyperintense = t2_hyperintense[~pd.isnull(t2_hyperintense)]
+    t2_hyperintense_orig = np.array(full_data_nonzero["T2"][patient_filter_])
+    t2_hyperintense_orig[t2_hyperintense_orig == '-999.0'] = np.nan
+    #t2_hyperintense = t2_hyperintense_orig[t2_hyperintense_orig != '-999.0']
+    t2_hyperintense = t2_hyperintense_orig[~pd.isnull(t2_hyperintense_orig)]
     t2_hyperintense = np.array([int(x) for x in t2_hyperintense])
 
-    oedema = np.array(full_data_nonzero["Oedema"][patient_filter_])
-    oedema = oedema[oedema != '-999.0']
-    oedema = oedema[~pd.isnull(oedema)]
+    oedema_orig = np.array(full_data_nonzero["Oedema"][patient_filter_])
+    oedema_orig[oedema_orig == "-999.0"] = np.nan
+    #oedema = oedema_orig[oedema_orig != '-999.0']
+    oedema = oedema_orig[~pd.isnull(oedema_orig)]
     oedema = np.array([int(x) for x in oedema])
 
     earliest_timestamp_filter = np.array(full_data_nonzero["Earliest_Timestamp"] == 1)
@@ -479,13 +481,15 @@ def preprocess(data_path):
     print(len(volume_change))
 
     # create temporary dataframe to store data relevant for statistical analysis
+    print(t2_hyperintense_orig)
     df_association = pd.DataFrame({
         "volume_change": volume_change,
         "volume_change_relative": volume_change_relative,
         "init_volume_size": init_volume_size,
         "age_at_T1": age_at_T1,
         "total_follow_up_months": total_follow_up_months,
-        #"T2": full_data_nonzero["T2"],
+        "T2": t2_hyperintense_orig,
+        #"oedema": oedema_orig,
         "genders": genders,
         "Spacing3": slice_thickness,
         "Multifocality": multifocality,
@@ -497,10 +501,13 @@ def preprocess(data_path):
     # safe, lets just perform a Kruskal Wallis test instead.
 
     def kruskal_wallis_test_prompt(dependent_variable):
-        result = stats.kruskal_test(stats.as_formula('volume_change ~ ' + dependent_variable), data=df_association)
+        print(dependent_variable)
+        result = stats.kruskal_test(stats.as_formula('volume_change ~ ' + dependent_variable), data=df_association,
+                                    **{'na.action': stats.na_omit})
         print("kruskal wallis test, volume_change vs " + dependent_variable + ". p-value:", result.rx2('p.value')[0])
 
-    for var in ["age_at_T1", "total_follow_up_months", "genders", "init_volume_size", "Spacing3", "Multifocality"]:
+    for var in ["age_at_T1", "total_follow_up_months", "genders", "init_volume_size", "Spacing3", "Multifocality",
+                ]:  # "oedema", "T2"]:
         kruskal_wallis_test_prompt(var)
 
     exit()
