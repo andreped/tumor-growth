@@ -91,6 +91,7 @@ def preprocess(data_path):
     cohort_volumes_quality = pd.read_csv(os.path.join(data_path, "cohort_volumes_quality-removed_P09016-T6.csv"))
     # interrater_variability_study = pd.read_csv(os.path.join(data_path, "interrater_variability_study.csv"))  # not considered for now
     volumes = pd.read_csv(os.path.join(data_path, "Volumes.csv"))
+    t2_oedema = pd.read_csv(os.path.join(data_path, "T2_and_peritumorial_oedema.csv"), sep=";")
 
     # get unique patients
     patients = cohort_personal_info["Patient"]
@@ -107,10 +108,14 @@ def preprocess(data_path):
     filter_ = [x in patients_no_surgery for x in volumes["OP_ID"]]
     filtered_volumes = volumes[filter_]
 
+    filter_ = [x in patients_no_surgery for x in t2_oedema["Patient"]]
+    filtered_t2_oedema = t2_oedema[filter_]
+
     print("----\nFiltered data:")
     print(cohort_personal_info_filtered)
     print(filtered_cohort_volumes_quality)
     print(filtered_volumes)
+    print(filtered_t2_oedema)
 
     # 1) First assumption (lets sum all fragmented tumors together into one - total tumor volume in patient,
     #  for each time point). Use cohort volumes quality to catch all patients and time points
@@ -129,25 +134,27 @@ def preprocess(data_path):
         unique_timestamps = np.unique(list(curr_timestamps))
         unique_timestamps = sort_timestamps(unique_timestamps)
 
-        # get earliest timestamp with non-NaN volume
+        # get earliest timestamp with non-NaN or non-zero volume
         for t in unique_timestamps:
             tmp = curr_data[curr_data["Timestamp"] == t]
             curr_v = np.array(tmp["Volume"]).astype("float32")
             curr_v = sum(curr_v)
-            if not pd.isnull(curr_v):
+            if (curr_v != 0) and not pd.isnull(curr_v):
                 break
         init_timestamp = t
+        # print("final timestamp (and size):", init_timestamp, curr_v)
 
         # get last timestamp with non-NaN volume
         for t in unique_timestamps[::-1]:  # reversed ordered timestamp list
             tmp = curr_data[curr_data["Timestamp"] == t]
             curr_v = np.array(tmp["Volume"]).astype("float32")
             curr_v = sum(curr_v)
-            if not pd.isnull(curr_v):
+            #if not pd.isnull(curr_v):
+            if (curr_v != 0) and not pd.isnull(curr_v):
                 break
         last_timestamp = t
 
-        # get date of first timestamp of patient (T1 might not be the earliest!! If T1 is NaN, then T2 might be, etc.
+        # get date of first timestamp of patient (T1 might not be the earliest!! If T1 is NaN or 0, then T2 might be...
         first_timestamp_date = curr_data[curr_data["Timestamp"] == init_timestamp]["Date"]
         first_timestamp_date = str2datetime(np.asarray(first_timestamp_date)[0])
 
@@ -164,7 +171,8 @@ def preprocess(data_path):
         last_volume = np.asarray(last_volume)[0]
 
         # counter number of timestamps
-        nb_timestamps = len(curr_data["Timestamp"])
+        # nb_timestamps = len(curr_data["Timestamp"])
+        nb_timestamps = len(unique_timestamps)
 
         # for each time stamp, all clusters and sum these into one value (total tumor amount in ml)
         for timestamp in unique_timestamps:
@@ -178,10 +186,19 @@ def preprocess(data_path):
             curr_dates = np.asarray(curr_dates)
             curr_date = curr_dates[0]
 
+            # check if earliest timestamp, store categorical value
+            earliest_timestamp = int(timestamp == init_timestamp)
+            #if earliest_timestamp == 1:
+            #    print(timestamp)
+            #    print(init_timestamp)
+            #    print(earliest_timestamp)
+            #    print(curr_volume)
+            #    print()
+
             # translate current date to datetime format
             curr_date = str2datetime(curr_date)
 
-            data.append([pat, timestamp, nb_timestamps, initial_volume, last_volume, first_timestamp_date,
+            data.append([pat, timestamp, earliest_timestamp, nb_timestamps, initial_volume, last_volume, first_timestamp_date,
                          last_timestamp_date, curr_date, curr_volume])
             iter += 1
     data = np.array(data)
@@ -196,6 +213,7 @@ def preprocess(data_path):
     full_data["Final_Volume"] = data[:, -5].astype("float32")
     full_data["Initial_Volume"] = data[:, -6].astype("float32")
     full_data["Number_Of_Timestamps"] = data[:, -7].astype("float32")
+    full_data["Earliest_Timestamp"] = data[:, -8]
 
     # need to filter NaN volumes on merged data frame
     full_data = full_data[full_data.Volume != 0]
@@ -215,6 +233,16 @@ def preprocess(data_path):
 
             full_data.loc[r, 'Birth_Year'] = byear_new_format
             full_data.loc[r, 'Gender'] = gender
+
+    # add T2 and oedema information to full data frame
+    full_data["T2"] = (-999 * np.ones(full_data.shape[0])).astype("str")
+    full_data["Oedema"] = (-999 * np.ones(full_data.shape[0])).astype("str")
+    for patient in filtered_t2_oedema["Patient"]:
+        row_ids = np.where(full_data["Patient"] == patient)[0]
+        curr = filtered_t2_oedema[filtered_t2_oedema["Patient"] == patient]
+        for r in row_ids:
+            full_data.loc[r, "T2"] = np.array(curr["T2"])
+            full_data.loc[r, "Oedema"] = np.array(curr["peritumorial_oedema"])
 
     # remove all occurences where Volumes=0 (not possible -> tumor was not annotated)
     filter_zero_volumes = full_data["Volume"] != str(0.0)
@@ -267,11 +295,25 @@ def preprocess(data_path):
     patient_filter_ = full_data_nonzero["Timestamp"] == "T1"
     # @TODO: After removing volumes with 0 size, some T1 points are now missing
 
-    age_at_T1 = np.array(full_data_nonzero["Current_Age"][patient_filter_]).astype("float32") / 365.25
+    # age_at_T1 = np.array(full_data_nonzero["Current_Age"][patient_filter_]).astype("float32") / 365.25
     genders = np.array(full_data_nonzero["Gender"][patient_filter_])
-    init_volume_size = np.array(full_data_nonzero["Volume"][patient_filter_])
+    # init_volume_size = np.array(full_data_nonzero["Volume"][patient_filter_])
     number_of_mri_scans = np.array(full_data_nonzero["Number_Of_Timestamps"][patient_filter_])
     slice_thickness = np.array(full_data_nonzero["Spacing3"][patient_filter_])
+
+    t2_hyperintense = np.array(full_data_nonzero["T2"][patient_filter_])
+    t2_hyperintense = t2_hyperintense[t2_hyperintense != '-999.0']
+    t2_hyperintense = t2_hyperintense[~pd.isnull(t2_hyperintense)]
+    t2_hyperintense = np.array([int(x) for x in t2_hyperintense])
+
+    oedema = np.array(full_data_nonzero["Oedema"][patient_filter_])
+    oedema = oedema[oedema != '-999.0']
+    oedema = oedema[~pd.isnull(oedema)]
+    oedema = np.array([int(x) for x in oedema])
+
+    earliest_timestamp_filter = np.array(full_data_nonzero["Earliest_Timestamp"] == 1)
+    init_volume_size = np.array(full_data_nonzero["Volume"][earliest_timestamp_filter])
+    age_at_T1 = np.array(full_data_nonzero["Current_Age"][earliest_timestamp_filter]).astype("float32") / 365.25
 
     patients = np.unique(full_data_nonzero["Patient"])
     total_follow_up_days = []
@@ -281,9 +323,14 @@ def preprocess(data_path):
     total_follow_up_months = np.array(total_follow_up_days) / 30
 
     # @TODO: Which threshold to use? Base it on measurements error (largest error, quantiles?) in
-    #   inter-rater variability study?
-    #   - might be that 15% is better, from looking at the inter-rater variability, but not sure
+    #   inter-rater variability study? 15 % makes sense as it corresponds to the largest error in the inter-rater study
     relative_growth_threshold = 0.15
+
+    # age_at_T1 = []
+    # genders = []
+    # init_volume_size = []
+    # number_of_mri_scans = []
+    # slice_thickness = []
 
     volume_change = []
     volume_change_relative = []
@@ -293,9 +340,10 @@ def preprocess(data_path):
     for patient in patients:
         curr = full_data_nonzero[full_data_nonzero["Patient"] == patient]
         first_timestamp = get_earliest_timestamp(curr["Timestamp"])
+        # first_timestamp = np.array(curr["Timestamp"][curr["Earliest_Timestamp"] == 1])
         last_timestamp = get_last_timestamp(curr["Timestamp"])
-        initial_size = np.array(curr[curr["Timestamp"] == first_timestamp]["Volume"])
-        final_size = np.array(curr[curr["Timestamp"] == last_timestamp]["Volume"])
+        initial_size = np.array(curr[curr["Timestamp"] == first_timestamp]["Volume"])[0]
+        final_size = np.array(curr[curr["Timestamp"] == last_timestamp]["Volume"])[0]
 
         relative_change = (final_size - initial_size) / initial_size
 
@@ -361,11 +409,58 @@ def preprocess(data_path):
     #      np.round(scipy.stats.iqr(volume_grew), 3), np.round(np.min(volume_grew), 3),
     #      np.round(np.max(volume_grew), 3))
 
-    print(len(init_volume_size))
-    print(len(volume_change_relative))
-
+    # print("correlation between tumor volume at diagnosis and RELATIVE tumor growth:",
+    #       scipy.stats.pearsonr(init_volume_size, volume_change_relative))
     print("correlation between tumor volume at diagnosis and tumor growth:",
-          scipy.stats.pearsonr(init_volume_size, volume_change_relative))
+          scipy.stats.pearsonr(init_volume_size, volume_change))
+
+    '''
+    fig, ax = plt.subplots(2, 1)
+    graph = sns.scatterplot(ax=ax[0], x=init_volume_size, y=volume_change)
+    graph.axhline(0)
+    ax[0].set_xlabel("Initial volume size")
+    ax[0].set_ylabel("Volume change [ml] (T_last - T1)")
+
+    graph = sns.scatterplot(ax=ax[1], x=init_volume_size, y=volume_change_relative)
+    graph.axhline(0)
+    ax[1].set_xlabel("Initial volume size [T1]")
+    ax[1].set_ylabel("Relative volume change [%] (T_last vs T1)")
+
+    plt.show()
+    '''
+
+    # T2 hyperintense signal - calculate summary statistics
+    tmp = np.unique(t2_hyperintense, return_counts=True)
+    print("T2 hyperintense signal (counts for 1/2/3 categories):",
+          tmp, tmp[1] / len(t2_hyperintense))
+    tmp = np.unique(oedema, return_counts=True)
+    print("Oedema (counts for 0/1 categories):",
+          tmp, tmp[1] / len(oedema))
+
+    def test_univariate_normality(x):
+        """
+        Shapiro-Wilk suitable for datasets with N < 50, whereas Kolmogorov-Smirnov tests more suitable for N > 50
+        """
+        x = full_data_nonzero["Volume"]
+        result = stats.ks_test(x, "pnorm", mean=np.mean(x), sd=np.std(x))
+        # result = stats.shapiro_test(x)
+        return result.rx2('p.value')[0]
+
+    # perform ANOVA to assess the association between tumor growth and different variables
+    # 1) first test for normality
+    print("Univariate normality tests:")
+    print("p-value tumor growth:", test_univariate_normality(volume_change))
+    print("p-value Age:", test_univariate_normality(volume_change_relative))
+    print("p-value Slice thickness:", test_univariate_normality(full_data_nonzero["Spacing3"]))
+    # print("p-value T2:", test_univariate_normality(full_data_nonzero["T2"]))
+    # print("p-value Oedema:", test_univariate_normality(full_data_nonzero["Oedema"]))
+    # -> Data is NOT normal! Cannot perform ordinary ANOVA analysis
+
+    #sm.qqplot(volume_change_relative, line='45')
+    #plt.show()
+
+
+
 
     exit()
 
