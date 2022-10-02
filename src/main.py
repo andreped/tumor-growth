@@ -488,27 +488,41 @@ def preprocess(data_path):
         "init_volume_size": init_volume_size,
         "age_at_T1": age_at_T1,
         "total_follow_up_months": total_follow_up_months,
-        "T2": t2_hyperintense_orig,
+        #"T2": t2_hyperintense_orig,
         #"oedema": oedema_orig,
         "genders": genders,
         "Spacing3": slice_thickness,
         "Multifocality": multifocality,
     })
 
+    df_association_dropped_na = df_association.copy()
+    df_association_dropped_na["T2"] = t2_hyperintense_orig
+    df_association_dropped_na["oedema"] = oedema_orig
+    df_association_dropped_na = df_association_dropped_na.dropna()
+    df_association_dropped_na["T2"] = df_association_dropped_na["T2"].astype(int)
+    df_association_dropped_na["oedema"] = df_association_dropped_na["oedema"].astype(int)
+
+    print(df_association_dropped_na["T2"])
+    print(df_association_dropped_na["oedema"])
+
+    print(df_association_dropped_na)
+
     # As data is not normal, we use a non-parametric test to assess association between different dependent variables
     # against tumor growth.
     # We could use regular ANOVA, which is known to be quite robust against deviations from Normality, but just to be
     # safe, lets just perform a Kruskal Wallis test instead.
 
-    def kruskal_wallis_test_prompt(dependent_variable):
+    def kruskal_wallis_test_prompt(dependent_variable, data):
         print(dependent_variable)
-        result = stats.kruskal_test(stats.as_formula('volume_change ~ ' + dependent_variable), data=df_association,
+        result = stats.kruskal_test(stats.as_formula('volume_change ~ ' + dependent_variable), data=data,
                                     **{'na.action': stats.na_omit})
         print("kruskal wallis test, volume_change vs " + dependent_variable + ". p-value:", result.rx2('p.value')[0])
 
-    for var in ["age_at_T1", "total_follow_up_months", "genders", "init_volume_size", "Spacing3", "Multifocality",
-                ]:  # "oedema", "T2"]:
-        kruskal_wallis_test_prompt(var)
+    for var in ["age_at_T1", "total_follow_up_months", "genders", "init_volume_size", "Spacing3", "Multifocality"]:
+        kruskal_wallis_test_prompt(var, data=df_association)
+
+    for var in ["T2", "oedema"]:
+        kruskal_wallis_test_prompt(var, data=df_association_dropped_na)
 
     exit()
 
