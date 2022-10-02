@@ -170,6 +170,9 @@ def preprocess(data_path):
         last_volume = curr_data[curr_data["Timestamp"] == last_timestamp]["Volume"]
         last_volume = np.asarray(last_volume)[0]
 
+        # get cluster numbers for current patient (if above 1, multifocal "by definition")
+        multifocality = int(np.any(curr_data["Clusters total"] > 1))
+
         # counter number of timestamps
         # nb_timestamps = len(curr_data["Timestamp"])
         nb_timestamps = len(unique_timestamps)
@@ -198,7 +201,7 @@ def preprocess(data_path):
             # translate current date to datetime format
             curr_date = str2datetime(curr_date)
 
-            data.append([pat, timestamp, earliest_timestamp, nb_timestamps, initial_volume, last_volume, first_timestamp_date,
+            data.append([pat, timestamp, multifocality, earliest_timestamp, nb_timestamps, initial_volume, last_volume, first_timestamp_date,
                          last_timestamp_date, curr_date, curr_volume])
             iter += 1
     data = np.array(data)
@@ -214,6 +217,7 @@ def preprocess(data_path):
     full_data["Initial_Volume"] = data[:, -6].astype("float32")
     full_data["Number_Of_Timestamps"] = data[:, -7].astype("float32")
     full_data["Earliest_Timestamp"] = data[:, -8]
+    full_data["Multifocality"] = data[:, -9]
 
     # need to filter NaN volumes on merged data frame
     full_data = full_data[full_data.Volume != 0]
@@ -295,6 +299,9 @@ def preprocess(data_path):
     # patient_filter_ = full_data_nonzero["Timestamp"] == "T1"
     # @TODO: After removing volumes with 0 size, some T1 points are now missing (FIXED BELOW)
     patient_filter_ = np.array(full_data_nonzero["Earliest_Timestamp"]) == 1
+
+    # multifocality
+    multifocality = np.array(full_data_nonzero["Multifocality"][patient_filter_])
 
     # age_at_T1 = np.array(full_data_nonzero["Current_Age"][patient_filter_]).astype("float32") / 365.25
     genders = np.array(full_data_nonzero["Gender"][patient_filter_])
@@ -399,6 +406,7 @@ def preprocess(data_path):
           np.round(np.median(slice_thickness), 3),
           np.round(scipy.stats.iqr(slice_thickness), 3), np.round(np.min(slice_thickness), 3),
           np.round(np.max(slice_thickness), 3))
+    print("multifocality (count + %):", sum(multifocality), sum(multifocality) / len(multifocality))
 
 
     # Correlation between tumor volume at diagnosis and tumor growth?
@@ -473,12 +481,14 @@ def preprocess(data_path):
     # create temporary dataframe to store data relevant for statistical analysis
     df_association = pd.DataFrame({
         "volume_change": volume_change,
+        "volume_change_relative": volume_change_relative,
         "init_volume_size": init_volume_size,
         "age_at_T1": age_at_T1,
         "total_follow_up_months": total_follow_up_months,
         #"T2": full_data_nonzero["T2"],
         "genders": genders,
-        #"Spacing3": full_data_nonzero["Spacing3"],
+        "Spacing3": slice_thickness,
+        "Multifocality": multifocality,
     })
 
     # As data is not normal, we use a non-parametric test to assess association between different dependent variables
@@ -486,12 +496,12 @@ def preprocess(data_path):
     # We could use regular ANOVA, which is known to be quite robust against deviations from Normality, but just to be
     # safe, lets just perform a Kruskal Wallis test instead.
 
-    result = stats.kruskal_test(stats.as_formula('volume_change ~ age_at_T1'), data=df_association)
+    def kruskal_wallis_test_prompt(dependent_variable):
+        result = stats.kruskal_test(stats.as_formula('volume_change ~ ' + dependent_variable), data=df_association)
+        print("kruskal wallis test, volume_change vs " + dependent_variable + ". p-value:", result.rx2('p.value')[0])
 
-    print(result)
-
-
-
+    for var in ["age_at_T1", "total_follow_up_months", "genders", "init_volume_size", "Spacing3", "Multifocality"]:
+        kruskal_wallis_test_prompt(var)
 
     exit()
 
