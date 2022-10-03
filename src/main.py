@@ -92,6 +92,7 @@ def preprocess(data_path):
     # interrater_variability_study = pd.read_csv(os.path.join(data_path, "interrater_variability_study.csv"))  # not considered for now
     volumes = pd.read_csv(os.path.join(data_path, "Volumes.csv"))
     t2_oedema = pd.read_csv(os.path.join(data_path, "T2_and_peritumorial_oedema.csv"), sep=";")
+    scanner_info = pd.read_csv(os.path.join(data_path, "scanners_info.csv"), sep=",")
 
     # get unique patients
     patients = cohort_personal_info["Patient"]
@@ -247,6 +248,19 @@ def preprocess(data_path):
         for r in row_ids:
             full_data.loc[r, "T2"] = np.array(curr["T2"])
             full_data.loc[r, "Oedema"] = np.array(curr["peritumorial_oedema"])
+
+    # add scanner info to the full data frame
+    full_data["Manufacturer"] = (np.nan * np.ones(full_data.shape[0])).astype("str")
+    full_data["Model_Name"] = (np.nan * np.ones(full_data.shape[0])).astype("str")
+    for i in range(len(scanner_info)):
+        patient, timestamp, manufacturer, model_name = scanner_info.loc[i]
+        row_id = np.where((full_data["Patient"] == patient) & (full_data["Timestamp"] == timestamp))[0]
+
+        if len(row_id) == 0:
+            continue
+
+        full_data.loc[row_id[0], "Manufacturer"] = manufacturer
+        full_data.loc[row_id[0], "Model_Name"] = model_name
 
     # remove all occurences where Volumes=0 (not possible -> tumor was not annotated)
     filter_zero_volumes = full_data["Volume"] != str(0.0)
@@ -409,6 +423,11 @@ def preprocess(data_path):
           np.round(scipy.stats.iqr(slice_thickness), 3), np.round(np.min(slice_thickness), 3),
           np.round(np.max(slice_thickness), 3))
     print("multifocality (count + %):", sum(multifocality), sum(multifocality) / len(multifocality))
+    print("Manufacturer (count + %):", np.unique(full_data_nonzero["Manufacturer"], return_counts=True),
+          np.unique(full_data_nonzero["Manufacturer"], return_counts=True)[1] / len(full_data_nonzero))
+    print("Model_Name (count + %):", np.unique(full_data_nonzero["Model_Name"], return_counts=True),
+          np.unique(full_data_nonzero["Model_Name"], return_counts=True)[1] / len(full_data_nonzero))
+    exit()
 
 
     # Correlation between tumor volume at diagnosis and tumor growth?
