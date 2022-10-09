@@ -5,13 +5,14 @@ from utils import sort_timestamps, remove_surgery_patients, plot_graphs, str2dat
     calculate_volumetric_diameter, get_last_timestamp
 import seaborn as sns
 from rpy2 import robjects as ro
-from rpy2.robjects import pandas2ri
+from rpy2.robjects import pandas2ri, numpy2ri
 from rpy2.robjects.packages import importr
 import matplotlib.pyplot as plt
 from lmfit import Minimizer, Parameters, report_fit
 from tableone import TableOne
 import scipy
 import statsmodels.api as sm
+from scipy.stats import spearmanr, pearsonr
 
 
 
@@ -391,6 +392,9 @@ def preprocess(data_path):
     volume_change = np.array(volume_change)
     volume_change_relative = np.array(volume_change_relative)
 
+    # get yearly growth
+    yearly_growth = np.array(volume_change_relative) / (np.array(total_follow_up_days) / 356.25)
+
     print(full_data_nonzero)
     N = len(age_at_T1)
     # print(age_at_T1)
@@ -412,6 +416,10 @@ def preprocess(data_path):
     print("relative volume change (T1 to T-last): (median/IQR/min/max):", np.round(np.median(volume_change_relative), 3),
           np.round(scipy.stats.iqr(volume_change_relative), 3), np.round(np.min(volume_change_relative), 3),
           np.round(np.max(volume_change_relative), 3))
+    print("yearly relative growth (T1 to T-last): (median/IQR/min/max):",
+          np.round(np.median(yearly_growth), 3),
+          np.round(scipy.stats.iqr(yearly_growth), 3), np.round(np.min(yearly_growth), 3),
+          np.round(np.max(yearly_growth), 3))
     print("number of patients with tumors that grew/no change/shrank:",
           len(volume_grew), len(volume_no_change), len(volume_shrank), "| % |",
           np.round(len(volume_grew) / N, 3),
@@ -433,7 +441,20 @@ def preprocess(data_path):
     print("Tesla (count + %):", np.unique(full_data_nonzero["Tesla"], return_counts=True),
           np.unique(full_data_nonzero["Tesla"], return_counts=True)[1] / len(full_data_nonzero))
 
-    exit()
+    # test if yearly relative change is significant
+    # print(stats.t_test(yearly_growth, alternative="two.sided"))
+    # wilcoxon_yearly_growth_result = stats.wilcox_test(yearly_growth, exact=True, conf_int=True, conf_level=0.95)
+    # print(wilcoxon_yearly_growth_result.rx2('p.value')[0], wilcoxon_yearly_growth_result.rx2('conf.int'))
+
+    def wilcox_test_custom(x):
+        R.assign("variable", x)
+        R("res <- wilcox.test(variable, exact=TRUE, conf.int=TRUE, conf.level=0.95)")
+        r_result = R("res")
+        return r_result.rx2('p.value')[0], r_result.rx2('conf.int').tolist()
+
+    print(wilcox_test_custom(yearly_growth))
+
+    # exit()
 
 
     # Correlation between tumor volume at diagnosis and tumor growth?
@@ -518,6 +539,7 @@ def preprocess(data_path):
         "genders": genders,
         "Spacing3": slice_thickness,
         "Multifocality": multifocality,
+        "yearly_growth": yearly_growth,
     })
 
     df_association_dropped_na = df_association.copy()
@@ -526,6 +548,7 @@ def preprocess(data_path):
     df_association_dropped_na = df_association_dropped_na.dropna()
     df_association_dropped_na["T2"] = df_association_dropped_na["T2"].astype(int)
     df_association_dropped_na["oedema"] = df_association_dropped_na["oedema"].astype(int)
+    df_association_dropped_na["yearly_growth"] = df_association["yearly_growth"]
 
     print(df_association_dropped_na["T2"])
     print(df_association_dropped_na["oedema"])
@@ -537,17 +560,51 @@ def preprocess(data_path):
     # We could use regular ANOVA, which is known to be quite robust against deviations from Normality, but just to be
     # safe, lets just perform a Kruskal Wallis test instead.
 
+    # """
     def kruskal_wallis_test_prompt(dependent_variable, data):
-        print(dependent_variable)
-        result = stats.kruskal_test(stats.as_formula('volume_change ~ ' + dependent_variable), data=data,
-                                    **{'na.action': stats.na_omit})
-        print("kruskal wallis test, volume_change vs " + dependent_variable + ". p-value:", result.rx2('p.value')[0])
+        if dependent_variable in ["genders", "T2", "oedema", "Multifocality"]:
+            curr_formula = stats.as_formula('yearly_growth ~ factor(' + dependent_variable + ')')
+        else:
+            curr_formula = stats.as_formula('yearly_growth ~ ' + dependent_variable)
+        result = stats.kruskal_test(curr_formula, data=data, **{'na.action': stats.na_omit})
+        print("kruskal wallis test, yearly_growth vs " + dependent_variable + ". p-value:", result.rx2('p.value')[0])
+    # """
 
-    for var in ["age_at_T1", "total_follow_up_months", "genders", "init_volume_size", "Spacing3", "Multifocality"]:
+    """
+    def wilcox_test_custom_xy(x, y, data):
+        R.assign("variable", x)
+        R.assign("growth", y)
+        R.assign("data", data)
+        R("res <- wilcox.test(growth ~ variable, data=data, exact=TRUE, conf.int=TRUE, conf.level=0.95)")
+        r_result = R("res")
+        print(r_result)
+        return r_result.rx2('p.value')[0], r_result.rx2('conf.int').tolist()
+    """
+
+    for var in ["genders", "age_at_T1", "total_follow_up_months", "init_volume_size", "Spacing3", "Multifocality"]:
+        """
+        print(var, " : ", wilcox_test_custom_xy(np.array(df_association[var]),
+                                                np.array(df_association["volume_change"]),
+                                                data=df_association))
+        """
         kruskal_wallis_test_prompt(var, data=df_association)
 
+        if var in ["genders", "Multifocality"]:
+            corr_ = "NA"
+        else:
+            corr_ = pearsonr(df_association["yearly_growth"], df_association[var])
+        print("spearman correlation:", corr_, "\n")
+
     for var in ["T2", "oedema"]:
+        """
+        print(var, " : ", wilcox_test_custom_xy(np.array(df_association_dropped_na[var]),
+                                                np.array(df_association_dropped_na["volume_change"]),
+                                                data=df_association_dropped_na))
+        """
         kruskal_wallis_test_prompt(var, data=df_association_dropped_na)
+        print("spearman correlation:", "NA")
+              #pearsonr(df_association_dropped_na["yearly_growth"],
+              #df_association_dropped_na[var]), "\n")
 
     exit()
 
