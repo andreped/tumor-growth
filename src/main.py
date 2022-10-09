@@ -112,12 +112,6 @@ def preprocess(data_path):
     filter_ = [x in patients_no_surgery for x in t2_oedema["Patient"]]
     filtered_t2_oedema = t2_oedema[filter_]
 
-    print("----\nFiltered data:")
-    print(cohort_personal_info_filtered)
-    print(filtered_cohort_volumes_quality)
-    print(filtered_volumes)
-    print(filtered_t2_oedema)
-
     # 1) First assumption (lets sum all fragmented tumors together into one - total tumor volume in patient,
     #  for each time point). Use cohort volumes quality to catch all patients and time points
     data = []
@@ -173,6 +167,7 @@ def preprocess(data_path):
 
         # get cluster numbers for current patient (if above 1, multifocal "by definition")
         multifocality = int(np.any(curr_data["Clusters total"] > 1))
+        clusters_total = max(curr_data["Clusters total"])
 
         # counter number of timestamps
         # nb_timestamps = len(curr_data["Timestamp"])
@@ -202,7 +197,7 @@ def preprocess(data_path):
             # translate current date to datetime format
             curr_date = str2datetime(curr_date)
 
-            data.append([pat, timestamp, multifocality, earliest_timestamp, nb_timestamps, initial_volume, last_volume, first_timestamp_date,
+            data.append([pat, timestamp, clusters_total, multifocality, earliest_timestamp, nb_timestamps, initial_volume, last_volume, first_timestamp_date,
                          last_timestamp_date, curr_date, curr_volume])
             iter += 1
     data = np.array(data)
@@ -219,6 +214,7 @@ def preprocess(data_path):
     full_data["Number_Of_Timestamps"] = data[:, -7].astype("float32")
     full_data["Earliest_Timestamp"] = data[:, -8]
     full_data["Multifocality"] = data[:, -9]
+    full_data["Clusters_total"] = data[:, -10]
 
     # need to filter NaN volumes on merged data frame
     full_data = full_data[full_data.Volume != 0]
@@ -252,8 +248,9 @@ def preprocess(data_path):
     # add scanner info to the full data frame
     full_data["Manufacturer"] = (np.nan * np.ones(full_data.shape[0])).astype("str")
     full_data["Model_Name"] = (np.nan * np.ones(full_data.shape[0])).astype("str")
+    full_data["Tesla"] = (np.nan * np.ones(full_data.shape[0]))
     for i in range(len(scanner_info)):
-        patient, timestamp, manufacturer, model_name = scanner_info.loc[i]
+        patient, timestamp, manufacturer, model_name, tesla = scanner_info.loc[i]
         row_id = np.where((full_data["Patient"] == patient) & (full_data["Timestamp"] == timestamp))[0]
 
         if len(row_id) == 0:
@@ -261,6 +258,7 @@ def preprocess(data_path):
 
         full_data.loc[row_id[0], "Manufacturer"] = manufacturer
         full_data.loc[row_id[0], "Model_Name"] = model_name
+        full_data.loc[row_id[0], "Tesla"] = float(tesla)
 
     # remove all occurences where Volumes=0 (not possible -> tumor was not annotated)
     filter_zero_volumes = full_data["Volume"] != str(0.0)
@@ -316,6 +314,7 @@ def preprocess(data_path):
 
     # multifocality
     multifocality = np.array(full_data_nonzero["Multifocality"][patient_filter_])
+    Clusters_total = np.array(full_data_nonzero["Clusters_total"][patient_filter_])
 
     # age_at_T1 = np.array(full_data_nonzero["Current_Age"][patient_filter_]).astype("float32") / 365.25
     genders = np.array(full_data_nonzero["Gender"][patient_filter_])
@@ -423,10 +422,17 @@ def preprocess(data_path):
           np.round(scipy.stats.iqr(slice_thickness), 3), np.round(np.min(slice_thickness), 3),
           np.round(np.max(slice_thickness), 3))
     print("multifocality (count + %):", sum(multifocality), sum(multifocality) / len(multifocality))
+    print("clusters total: (median/IQR/min/max):",
+          np.round(np.median(Clusters_total), 3),
+          np.round(scipy.stats.iqr(Clusters_total), 3), np.round(np.min(Clusters_total), 3),
+          np.round(np.max(Clusters_total), 3))
     print("Manufacturer (count + %):", np.unique(full_data_nonzero["Manufacturer"], return_counts=True),
           np.unique(full_data_nonzero["Manufacturer"], return_counts=True)[1] / len(full_data_nonzero))
     print("Model_Name (count + %):", np.unique(full_data_nonzero["Model_Name"], return_counts=True),
           np.unique(full_data_nonzero["Model_Name"], return_counts=True)[1] / len(full_data_nonzero))
+    print("Tesla (count + %):", np.unique(full_data_nonzero["Tesla"], return_counts=True),
+          np.unique(full_data_nonzero["Tesla"], return_counts=True)[1] / len(full_data_nonzero))
+
     exit()
 
 
@@ -582,8 +588,6 @@ def preprocess(data_path):
     tmp = np.array(full_data_nonzero["Number_Of_Timestamps"].astype("int32"))
     print(np.unique(tmp, return_counts=True))
     print("mu/std/IQR:", np.mean(tmp), np.std(tmp), scipy.stats.iqr(tmp, axis=0))
-
-    exit()
 
 
     # create new, tuned data frame for doing statistics
