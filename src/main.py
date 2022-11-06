@@ -592,7 +592,8 @@ def preprocess(data_path):
         if var in ["genders", "Multifocality"]:
             corr_ = "NA"
         else:
-            corr_ = pearsonr(df_association["yearly_growth"], df_association[var])
+            # corr_ = pearsonr(df_association["yearly_growth"], df_association[var])
+            corr_ = spearmanr(df_association["yearly_growth"], df_association[var])
         print("spearman correlation:", corr_, "\n")
 
     for var in ["T2", "oedema"]:
@@ -780,4 +781,3 @@ if __name__ == "__main__":
 
     # get patient summary statistics
     # get_patient_characteristics(data_path)
-
