@@ -1,20 +1,16 @@
 import pandas as pd
 import os
 import numpy as np
-from utils import sort_timestamps, remove_surgery_patients, plot_graphs, str2datetime, get_earliest_timestamp,\
-    calculate_volumetric_diameter, get_last_timestamp
+from utils import sort_timestamps, remove_surgery_patients, str2datetime, get_earliest_timestamp,\
+    get_last_timestamp
 from statistics import kruskal_wallis_test_prompt, test_univariate_normality, wilcox_test_custom
 import seaborn as sns
 from rpy2 import robjects as ro
 from rpy2.robjects import pandas2ri, numpy2ri
 from rpy2.robjects.packages import importr
 import matplotlib.pyplot as plt
-from lmfit import Minimizer, Parameters, report_fit
-from tableone import TableOne
 import scipy
-import statsmodels.api as sm
-from scipy.stats import spearmanr, pearsonr
-
+from scipy.stats import spearmanr
 
 
 # R-related imports
