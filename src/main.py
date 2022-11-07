@@ -3,6 +3,7 @@ import os
 import numpy as np
 from utils import sort_timestamps, remove_surgery_patients, plot_graphs, str2datetime, get_earliest_timestamp,\
     calculate_volumetric_diameter, get_last_timestamp
+from statistics import kruskal_wallis_test_prompt, test_univariate_normality, wilcox_test_custom
 import seaborn as sns
 from rpy2 import robjects as ro
 from rpy2.robjects import pandas2ri, numpy2ri
@@ -302,10 +303,6 @@ def preprocess(data_path):
     # slice_thickness_filter = np.array(full_data_nonzero["Spacing3"]) < 2
     # full_data_nonzero = full_data_nonzero[slice_thickness_filter]
 
-    # print(full_data_nonzero.shape)
-
-    # exit()
-
     # create summary statistics for study - Table 1
     full_data_nonzero["Current_Age_Years"] = np.array(full_data_nonzero["Current_Age"]).astype("float32") / 365.25
 
@@ -351,17 +348,12 @@ def preprocess(data_path):
     #   inter-rater variability study? 15 % makes sense as it corresponds to the largest error in the inter-rater study
     relative_growth_threshold = 0.15
 
-    # age_at_T1 = []
-    # genders = []
-    # init_volume_size = []
-    # number_of_mri_scans = []
-    # slice_thickness = []
-
     volume_change = []
     volume_change_relative = []
     volume_grew = []
     volume_shrank = []
     volume_no_change = []
+    volume_change_categorical = []
     for patient in patients:
         curr = full_data_nonzero[full_data_nonzero["Patient"] == patient]
         first_timestamp = get_earliest_timestamp(curr["Timestamp"])
@@ -371,22 +363,19 @@ def preprocess(data_path):
         final_size = np.array(curr[curr["Timestamp"] == last_timestamp]["Volume"])[0]
 
         relative_change = (final_size - initial_size) / initial_size
-
-        #print()
-        #print(curr["Timestamp"])
-        #print(last_timestamp)
-        #print(initial_size)
-        #print(final_size)
         initial_size = float(initial_size)
         final_size = float(final_size)
         volume_change.append(final_size - initial_size)
         volume_change_relative.append(relative_change)
 
         if relative_change > relative_growth_threshold:
+            volume_change_categorical.append(1)
             volume_grew.append([patient, initial_size, relative_change])
         elif relative_change < - relative_growth_threshold:
+            volume_change_categorical.append(-1)
             volume_shrank.append([patient, initial_size, relative_change])
         else:
+            volume_change_categorical.append(0)
             volume_no_change.append([patient, initial_size, relative_change])
 
     volume_change = np.array(volume_change)
@@ -441,36 +430,7 @@ def preprocess(data_path):
     print("Tesla (count + %):", np.unique(full_data_nonzero["Tesla"], return_counts=True),
           np.unique(full_data_nonzero["Tesla"], return_counts=True)[1] / len(full_data_nonzero))
 
-    # test if yearly relative change is significant
-    # print(stats.t_test(yearly_growth, alternative="two.sided"))
-    # wilcoxon_yearly_growth_result = stats.wilcox_test(yearly_growth, exact=True, conf_int=True, conf_level=0.95)
-    # print(wilcoxon_yearly_growth_result.rx2('p.value')[0], wilcoxon_yearly_growth_result.rx2('conf.int'))
-
-    def wilcox_test_custom(x):
-        R.assign("variable", x)
-        R("res <- wilcox.test(variable, exact=TRUE, conf.int=TRUE, conf.level=0.95)")
-        r_result = R("res")
-        return r_result.rx2('p.value')[0], r_result.rx2('conf.int').tolist()
-
     print(wilcox_test_custom(yearly_growth))
-
-    # exit()
-
-
-    # Correlation between tumor volume at diagnosis and tumor growth?
-    volume_grew = np.array(volume_grew)
-    volume_shrank = np.array(volume_shrank)
-    volume_no_change = np.array(volume_no_change)
-
-    #print("TUMOR GREW | relative volume change (T1 to T-last): (median/IQR/min/max):",
-    #      np.round(np.median(volume_grew[:, ]), 3),
-    #      np.round(scipy.stats.iqr(volume_grew), 3), np.round(np.min(volume_grew), 3),
-    #      np.round(np.max(volume_grew), 3))
-
-    # print("correlation between tumor volume at diagnosis and RELATIVE tumor growth:",
-    #       scipy.stats.pearsonr(init_volume_size, volume_change_relative))
-    print("correlation between tumor volume at diagnosis and tumor growth:",
-          scipy.stats.pearsonr(init_volume_size, volume_change))
 
     '''
     fig, ax = plt.subplots(2, 1)
@@ -495,15 +455,6 @@ def preprocess(data_path):
     print("Oedema (counts for 0/1 categories):",
           tmp, tmp[1] / len(oedema))
 
-    def test_univariate_normality(x):
-        """
-        Shapiro-Wilk suitable for datasets with N < 50, whereas Kolmogorov-Smirnov tests more suitable for N > 50
-        """
-        x = full_data_nonzero["Volume"]
-        result = stats.ks_test(x, "pnorm", mean=np.mean(x), sd=np.std(x))
-        # result = stats.shapiro_test(x)
-        return result.rx2('p.value')[0]
-
     # perform ANOVA to assess the association between tumor growth and different variables
     # 1) first test for normality
     print("Univariate normality tests:")
@@ -514,32 +465,20 @@ def preprocess(data_path):
     # print("p-value Oedema:", test_univariate_normality(full_data_nonzero["Oedema"]))
     # -> Data is NOT normal! Cannot perform ordinary ANOVA analysis
 
-    #sm.qqplot(volume_change_relative, line='45')
-    #plt.show()
-
-    print(list(full_data_nonzero.keys()))
-
-    print("counts:")
-    print(len(patients))
-    print(len(genders))
-    print(len(init_volume_size))
-    print(len(age_at_T1))
-    print(len(volume_change))
-
     # create temporary dataframe to store data relevant for statistical analysis
-    print(t2_hyperintense_orig)
     df_association = pd.DataFrame({
         "volume_change": volume_change,
         "volume_change_relative": volume_change_relative,
         "init_volume_size": init_volume_size,
         "age_at_T1": age_at_T1,
         "total_follow_up_months": total_follow_up_months,
-        #"T2": t2_hyperintense_orig,
-        #"oedema": oedema_orig,
+        "T2": t2_hyperintense_orig.astype("float32"),
+        "oedema": oedema_orig.astype("float32"),
         "genders": genders,
         "Spacing3": slice_thickness,
         "Multifocality": multifocality,
         "yearly_growth": yearly_growth,
+        "volume_change_categorical": volume_change_categorical,
     })
 
     df_association_dropped_na = df_association.copy()
@@ -550,95 +489,41 @@ def preprocess(data_path):
     df_association_dropped_na["oedema"] = df_association_dropped_na["oedema"].astype(int)
     df_association_dropped_na["yearly_growth"] = df_association["yearly_growth"]
 
-    print(df_association_dropped_na["T2"])
-    print(df_association_dropped_na["oedema"])
+    for var in ["age_at_T1", "total_follow_up_months", "init_volume_size", "Spacing3"]:
+        corr_ = spearmanr(df_association["yearly_growth"], df_association[var])
+        print("spearman correlation (" + var + "):", corr_, "\n")
 
-    print(df_association_dropped_na)
-
-    # As data is not normal, we use a non-parametric test to assess association between different dependent variables
-    # against tumor growth.
-    # We could use regular ANOVA, which is known to be quite robust against deviations from Normality, but just to be
-    # safe, lets just perform a Kruskal Wallis test instead.
-
-    # """
-    def kruskal_wallis_test_prompt(dependent_variable, data):
-        if dependent_variable in ["genders", "T2", "oedema", "Multifocality"]:
-            curr_formula = stats.as_formula('yearly_growth ~ factor(' + dependent_variable + ')')
-        else:
-            curr_formula = stats.as_formula('yearly_growth ~ ' + dependent_variable)
-        result = stats.kruskal_test(curr_formula, data=data, **{'na.action': stats.na_omit})
-        print("kruskal wallis test, yearly_growth vs " + dependent_variable + ". p-value:", result.rx2('p.value')[0])
-    # """
-
-    """
-    def wilcox_test_custom_xy(x, y, data):
-        R.assign("variable", x)
-        R.assign("growth", y)
-        R.assign("data", data)
-        R("res <- wilcox.test(growth ~ variable, data=data, exact=TRUE, conf.int=TRUE, conf.level=0.95)")
-        r_result = R("res")
-        print(r_result)
-        return r_result.rx2('p.value')[0], r_result.rx2('conf.int').tolist()
-    """
-
-    for var in ["genders", "age_at_T1", "total_follow_up_months", "init_volume_size", "Spacing3", "Multifocality"]:
-        """
-        print(var, " : ", wilcox_test_custom_xy(np.array(df_association[var]),
-                                                np.array(df_association["volume_change"]),
-                                                data=df_association))
-        """
-        kruskal_wallis_test_prompt(var, data=df_association)
-
-        if var in ["genders", "Multifocality"]:
-            corr_ = "NA"
-        else:
-            # corr_ = pearsonr(df_association["yearly_growth"], df_association[var])
-            corr_ = spearmanr(df_association["yearly_growth"], df_association[var])
-        print("spearman correlation:", corr_, "\n")
-
-    for var in ["T2", "oedema"]:
-        """
-        print(var, " : ", wilcox_test_custom_xy(np.array(df_association_dropped_na[var]),
-                                                np.array(df_association_dropped_na["volume_change"]),
-                                                data=df_association_dropped_na))
-        """
+    for var in ["genders", "T2", "oedema", "Multifocality"]:
         kruskal_wallis_test_prompt(var, data=df_association_dropped_na)
-        print("spearman correlation:", "NA")
-              #pearsonr(df_association_dropped_na["yearly_growth"],
-              #df_association_dropped_na[var]), "\n")
+
+    print("\nHandle growth as a categorical variable:\n")
+    for var in ["age_at_T1", "total_follow_up_months", "init_volume_size", "Spacing3"] + \
+               ["genders", "T2", "oedema", "Multifocality"]:
+        print("var:", var)
+        if var in ["age_at_T1", "total_follow_up_months", "init_volume_size", "Spacing3"]:
+            curr_formula = stats.as_formula('factor(' + var + ') ~ factor(volume_change_categorical)')
+            result = stats.kruskal_test(curr_formula, data=df_association, **{'na.action': stats.na_omit})
+            print("Kruskal wallis test, volume_change_categorical vs " + var + ". p-value:", result.rx2('p.value')[0])
+        else:
+            result = stats.chisq_test(df_association["yearly_growth"], df_association[var])
+            print("Chisq test, volume_change_categorical vs " + var + ". p-value:", result.rx2('p.value')[0])
+
+
+    print("\n######\n", "Now, lets study the growth pattern only for the tumours that grew")
+
+    df_association_grew_only = df_association[df_association["volume_change_categorical"] == 1]
+
+    print(df_association_grew_only)
+
+    # linear growth
+    model = R.lm('yearly_growth ~ age_at_T1', data=df_association_grew_only)
+    summary_model = R.summary(model)
+    print(summary_model)  # .rx2('coefficients'))
+    print("ANOVA:")
+    print(R.anova(model))
 
     exit()
 
-    '''
-    print("\n\n\n")
-    print("#" * 30)
-    print()
-    print(full_data_nonzero)
-    print()
-    print(list(full_data_nonzero.keys()))
-    print(full_data_nonzero.columns)
-
-    full_data_nonzero["Current_Age_Years"] = np.array(full_data_nonzero["Current_Age"]).astype("float32") / 365.25
-
-    table_ = TableOne(
-        data=full_data_nonzero,
-        columns=["Current_Age_Years", "Gender", "Initial_Volume", "Volume", "Final_Volume",
-                 "Follow_Up_Months", "Spacing1", "Spacing3"],
-        categorical=["Gender"],
-        # nonnormal=["Current_Age"],
-        rename={"Current_Age_Years": "Age",
-                "Initial_Volume": "Initial Volume",
-                "Final Volume": "Final Volume",
-                "Follow_Up_Months": "Follow Up Months",
-                "Spacing1": "Image resolution",
-                "Spacing3": "Slab thickness"},
-        pval=False,
-    )
-
-    print(table_.tabulate(tablefmt="fancy_grid"))
-
-    exit()
-    '''
 
     print()
     print(full_data_nonzero["Current_Age_Years"])
