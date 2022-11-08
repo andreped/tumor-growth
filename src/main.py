@@ -19,6 +19,8 @@ base = importr('base')
 nlme = importr('nlme')
 car = importr('car')
 outliers = importr('outliers')
+minpack_lm = importr('minpack.lm')
+# nlsfit = importr('nlsfit')
 pandas2ri.activate()
 R = ro.r
 
@@ -163,6 +165,9 @@ def preprocess(data_path):
         last_volume = curr_data[curr_data["Timestamp"] == last_timestamp]["Volume"]
         last_volume = np.asarray(last_volume)[0]
 
+        # get relative volume change
+        relative_volume_change = (last_volume - initial_volume) / initial_volume
+
         # get cluster numbers for current patient (if above 1, multifocal "by definition")
         multifocality = int(np.any(curr_data["Clusters total"] > 1))
         clusters_total = max(curr_data["Clusters total"])
@@ -195,7 +200,8 @@ def preprocess(data_path):
             # translate current date to datetime format
             curr_date = str2datetime(curr_date)
 
-            data.append([pat, timestamp, clusters_total, multifocality, earliest_timestamp, nb_timestamps, initial_volume, last_volume, first_timestamp_date,
+            data.append([pat, timestamp, relative_volume_change, clusters_total, multifocality, earliest_timestamp,
+                         nb_timestamps, initial_volume, last_volume, first_timestamp_date,
                          last_timestamp_date, curr_date, curr_volume])
             iter += 1
     data = np.array(data)
@@ -213,6 +219,7 @@ def preprocess(data_path):
     full_data["Earliest_Timestamp"] = data[:, -8]
     full_data["Multifocality"] = data[:, -9]
     full_data["Clusters_total"] = data[:, -10]
+    full_data["Relative_Volume_Change"] = data[:, -11].astype("float32")
 
     # need to filter NaN volumes on merged data frame
     full_data = full_data[full_data.Volume != 0]
@@ -344,12 +351,14 @@ def preprocess(data_path):
     #   inter-rater variability study? 15 % makes sense as it corresponds to the largest error in the inter-rater study
     relative_growth_threshold = 0.15
 
+    full_data_nonzero_grew_only = full_data_nonzero.copy()
     volume_change = []
     volume_change_relative = []
     volume_grew = []
     volume_shrank = []
     volume_no_change = []
     volume_change_categorical = []
+    grow_patients = []
     for patient in patients:
         curr = full_data_nonzero[full_data_nonzero["Patient"] == patient]
         first_timestamp = get_earliest_timestamp(curr["Timestamp"])
@@ -357,6 +366,11 @@ def preprocess(data_path):
         last_timestamp = get_last_timestamp(curr["Timestamp"])
         initial_size = np.array(curr[curr["Timestamp"] == first_timestamp]["Volume"])[0]
         final_size = np.array(curr[curr["Timestamp"] == last_timestamp]["Volume"])[0]
+
+        print("--")
+        print(initial_size, final_size)
+        print(curr["Initial_Volume"])
+        print(curr["Final_Volume"])
 
         relative_change = (final_size - initial_size) / initial_size
         initial_size = float(initial_size)
@@ -428,21 +442,6 @@ def preprocess(data_path):
 
     print(wilcox_test_custom(yearly_growth))
 
-    '''
-    fig, ax = plt.subplots(2, 1)
-    graph = sns.scatterplot(ax=ax[0], x=init_volume_size, y=volume_change)
-    graph.axhline(0)
-    ax[0].set_xlabel("Initial volume size")
-    ax[0].set_ylabel("Volume change [ml] (T_last - T1)")
-
-    graph = sns.scatterplot(ax=ax[1], x=init_volume_size, y=volume_change_relative)
-    graph.axhline(0)
-    ax[1].set_xlabel("Initial volume size [T1]")
-    ax[1].set_ylabel("Relative volume change [%] (T_last vs T1)")
-
-    plt.show()
-    '''
-
     # T2 hyperintense signal - calculate summary statistics
     tmp = np.unique(t2_hyperintense, return_counts=True)
     print("T2 hyperintense signal (counts for 1/2/3 categories):",
@@ -454,9 +453,9 @@ def preprocess(data_path):
     # perform ANOVA to assess the association between tumor growth and different variables
     # 1) first test for normality
     print("Univariate normality tests:")
-    print("p-value tumor growth:", test_univariate_normality(volume_change))
-    print("p-value Age:", test_univariate_normality(volume_change_relative))
-    print("p-value Slice thickness:", test_univariate_normality(full_data_nonzero["Spacing3"]))
+    print("p-value tumor growth:", test_univariate_normality(volume_change, full_data_nonzero))
+    print("p-value Age:", test_univariate_normality(volume_change_relative, full_data_nonzero))
+    print("p-value Slice thickness:", test_univariate_normality(full_data_nonzero["Spacing3"], full_data_nonzero))
     # print("p-value T2:", test_univariate_normality(full_data_nonzero["T2"]))
     # print("p-value Oedema:", test_univariate_normality(full_data_nonzero["Oedema"]))
     # -> Data is NOT normal! Cannot perform ordinary ANOVA analysis
@@ -507,158 +506,79 @@ def preprocess(data_path):
 
     print("\n######\n", "Now, lets study the growth pattern only for the tumours that grew")
 
-    df_association_grew_only = df_association[df_association["volume_change_categorical"] == 1]
+    # df_association_grew_only = df_association[df_association["volume_change_categorical"] == 1]
 
-    print(df_association_grew_only)
+    full_data_nonzero_grew_only = full_data_nonzero[full_data_nonzero["Relative_Volume_Change"] > 0.15]
 
-    # linear growth
-    model = R.lm('yearly_growth ~ age_at_T1', data=df_association_grew_only)
-    summary_model = R.summary(model)
-    print(summary_model)  # .rx2('coefficients'))
-    print("ANOVA:")
-    print(R.anova(model))
+    print(list(full_data_nonzero_grew_only.keys()))
+    print(full_data_nonzero_grew_only)
 
-    exit()
-
-
-    print()
-    print(full_data_nonzero["Current_Age_Years"])
-    # tmp = np.array(full_data_nonzero["Current_Age_Years"])
-    tmp = np.array(full_data_nonzero["Number_Of_Timestamps"].astype("int32"))
-    print(np.unique(tmp, return_counts=True))
-    print("mu/std/IQR:", np.mean(tmp), np.std(tmp), scipy.stats.iqr(tmp, axis=0))
-
-
-    # create new, tuned data frame for doing statistics
-    tmp_df = pd.DataFrame({
-        "Patient": full_data_nonzero["Patient"],
-        "Volume": full_data_nonzero["Volume"],
-        "Relative_Volume_Ratio": full_data_nonzero["Relative_Volume_Ratio"],
-        "Log_Relative_Volume_Ratio": np.log(full_data_nonzero["Relative_Volume_Ratio"]),
-        "Follow_Up_Months": full_data_nonzero["Follow_Up_Months"],
-        "Gender": full_data_nonzero["Gender"],
+    df_regression_association = pd.DataFrame({
+        "Relative_Volume_Change": full_data_nonzero_grew_only["Relative_Volume_Change"],
+        "Follow_Up_Months": full_data_nonzero_grew_only["Follow_Up_Months"],
     })
 
-    # test linear regression
-    model = R.lm('Relative_Volume_Ratio ~ Follow_Up_Months + factor(Gender)', data=tmp_df)
+    # linear growth
+    print("\nLINEAR:")
+    model = R.lm('Relative_Volume_Change ~ Follow_Up_Months', data=df_regression_association)
     summary_model = R.summary(model)
     print(summary_model)  # .rx2('coefficients'))
-    print("ANOVA:")
-    print(R.anova(model))
+    print("AIC:", stats.extractAIC(model))
 
-    # exit()
+    # exponential growth
+    print("\nEXPONENTIAL:")
+    model = R.lm('log(Relative_Volume_Change) ~ Follow_Up_Months', data=df_regression_association)
+    summary_model = R.summary(model)
+    print(summary_model)  # .rx2('coefficients'))
+    print("AIC:", stats.extractAIC(model))
 
-    print("Test if data is Normal using Shapiro-Wilk (univariate test):")
-    print(stats.shapiro_test(tmp_df["Relative_Volume_Ratio"]).rx2('p.value')[0])
-    # ->H0: Normality. p-value is significant. Data is NOT normal!
+    # linear radial growth
+    print("\nLinear radial growth")
+    df_regression_association['Am'] = max(df_regression_association["Relative_Volume_Change"]) - \
+                                      min(df_regression_association["Relative_Volume_Change"])
+    df_regression_association['Rd'] = - min(df_regression_association["Relative_Volume_Change"])
+    df_regression_association['LCP'] = max(df_regression_association["Relative_Volume_Change"]) - 1
+    startvector = ro.ListVector({
+        'Am': max(df_regression_association["Relative_Volume_Change"]) - min(
+            df_regression_association["Relative_Volume_Change"]),
+        'Rd': - min(df_regression_association["Relative_Volume_Change"]),
+        'LCP': max(df_regression_association["Relative_Volume_Change"]) - 1
+    })
+    gomp_model = minpack_lm.nlsLM("Relative_Volume_Change ~ Am * (1 - ((1 - Rd/Am))^(1 - (Follow_Up_Months / LCP)))",
+                                  start=startvector, data=df_regression_association)
 
-    # get (x, y) variables for both genders
-    gender_study_df_man = tmp_df[tmp_df["Gender"] == "man"]
-    gender_study_df_woman = tmp_df[tmp_df["Gender"] == "woman"]
+    summary_model = R.summary(gomp_model)
+    print(summary_model)
+    print("AIC:", stats.extractAIC(gomp_model))
 
-    # make regression curves for each gender
-    model_man = R.lm("Relative_Volume_Ratio ~ Follow_Up_Months", data=gender_study_df_man)
-    model_woman = R.lm("Relative_Volume_Ratio ~ Follow_Up_Months", data=gender_study_df_woman)
-    # summary_man = R.summary(model_man)
-    # R.abline(model_man)
-    # print(summary_man)
-    # exit()
+    # gompertzian growth
+    df_regression_association['Am'] = max(df_regression_association["Relative_Volume_Change"]) - \
+                                      min(df_regression_association["Relative_Volume_Change"])
+    df_regression_association['Rd'] = - min(df_regression_association["Relative_Volume_Change"])
+    df_regression_association['LCP'] = max(df_regression_association["Relative_Volume_Change"]) - 1
 
-    # get goodness of fit measures (AIC, Mallows Cp, R^2)
-    aic_ = stats.AIC(model)[0]
-    bic_ = stats.BIC(model)[0]
+    startvector = ro.ListVector({
+        'Am': max(df_regression_association["Relative_Volume_Change"]) - min(df_regression_association["Relative_Volume_Change"]),
+        'Rd': - min(df_regression_association["Relative_Volume_Change"]),
+        'LCP': max(df_regression_association["Relative_Volume_Change"]) - 1
+    })
 
-    print("R^2 | AIC | BIC:", summary_model.rx2("adj.r.squared")[0], aic_, bic_)
+    print(np.unique(df_regression_association["Relative_Volume_Change"]))
+    print(np.unique(df_regression_association["Follow_Up_Months"]))
+    #gomp_model = stats.nls("log(Relative_Volume_Change) ~ SSgompertz(log(Follow_Up_Months+1), Asym, b2, b3)",
+    #                       data=df_regression_association)
+    #data = dat,
+    #       start = list(y0=0.15, ymax=7, k=0.5, lag=3))
+    # gomp_model = stats.nls(gomp_formula, data=df_regression_association, start=startvector)
 
-    # sns.scatterplot(x=x_filtered, y=y_filtered, data=full_data_nonzero)
-    # sns.scatterplot(x="Follow_Up_Months", y="Relative_Volume_Ratio", hue="Gender",
-    #                data=full_data_nonzero, legend=True)
-    sns.lineplot(x="Follow_Up_Months", y="Volumes", hue="Patient",
-                 data=tmp_df, legend=True)
-    # sns.lineplot(x=[min(full_data_nonzero["Follow_Up_Months"]), max(full_data_nonzero["Follow_Up_Months"])], y=[1, 1],
-    #             palette="g")
-    plt.grid("on")
-    plt.tight_layout()
+    gomp_model = minpack_lm.nlsLM("Relative_Volume_Change ~ Am * (1 - ((1 - Rd/Am))^(1 - (Follow_Up_Months / LCP)))",
+                                  start=startvector, data=df_regression_association)
 
-    print(len(model.rx2('fitted.values')))
-    print(len(full_data_nonzero["Relative_Days_Difference"]))
-
-    # draw regression curves
-    # plt.plot(full_data_nonzero["Follow_Up_Months"], model.rx2('fitted.values'), 'k')
-
-    # plot regression curves for both genders
-    # plt.plot(gender_study_df_man["Follow_Up_Months"], model_man.rx2('fitted.values'), 'b')
-    # plt.plot(gender_study_df_woman["Follow_Up_Months"], model_woman.rx2('fitted.values'), 'r')
-
-    # show figure
-    plt.show()
-
-    exit()
-
-    # apply log to y
-    y_log_filtered = np.log(y_filtered)
-
-    # get mean exponential growth for each groups
-    y_log_filtered_man = y_log_filtered[gender_filtered == "man"]
-    y_log_filtered_woman = y_log_filtered[gender_filtered == "woman"]
-
-    # get coefficients
-    mu_y_log_man = np.mean(y_log_filtered_man)
-    mu_y_log_woman = np.mean(y_log_filtered_woman)
-
-    print("\nmeans (man/woman):")
-    print(mu_y_log_man)
-    print(mu_y_log_woman)
-
-    # print(gender_study_df.head(60))
-    print(full_data)
-    exit()
-
-    # sns.scatterplot(x=x_filtered, y=y_log_filtered, hue=gender_filtered, legend=True)
-    # plt.show()
-    # -> looks like white noise (but appears to be some trends). Should apply
-
-    # sns.lineplot(x=[min(x_filtered), max(x_filtered)], y=[mu_y_log_man, mu_y_log_man])
-    # sns.lineplot(x=[min(x_filtered), max(x_filtered)], y=[mu_y_log_woman, mu_y_log_woman])
-
-    # @FIXME: Probably interaction between "Relative_Days_Difference" and "age"
-
-    # perform linear regression to get coefficients
-    # @TODO: lm or glm?
-    model = R.lm('log(Relative_Volume_Ratio) ~ Relative_Days_Difference * age + factor(gender)', data=gender_study_df)
-    summary = R.summary(model)
-    coeffs = summary.rx2("coefficients")
-    print(summary)  # .rx2('coefficients'))
-
-    # Build a DataFrame from the coefficients tables
-    # print(coeffs.names)
-    # result = pd.DataFrame(pandas2ri.py2ri(coeffs), index=coeffs.names[0], columns=coeffs.names[1])
-    # print(result)
-
-    # Non-linear regression using lmfit (Python package)
-
-    # Gompertzian growth curve
-
-    sns.scatterplot(x=gender_study_df["Relative_Days_Difference"], y=gender_study_df["Relative_Volume_Ratio"],
-                    hue=gender_filtered, legend=True)
-    plt.show()
-
-    # @TODO: Challenging to set good initial values - optimization just fails...
-    gender_study_df['a'] = 1.0
-    gender_study_df['b'] = 13.0
-    gender_study_df['c'] = 0.09
-    startvector = ro.ListVector({'a': 1.0, 'b': 13.0, 'c': 0.09})
-    gomp_formula = stats.as_formula('Volumes ~ a * exp(b * exp(c * Relative_Days_Difference))')
-    # gomp_model = nlme.nls('Volumes ~ SSgompertz(Relative_Days_Difference,)')
-    gomp_model = stats.nls(gomp_formula, data=gender_study_df, start=startvector)
-
-    print(gomp_model)
+    summary_model = R.summary(gomp_model)
+    print(summary_model)
+    print("AIC:", stats.extractAIC(gomp_model))
 
 
 if __name__ == "__main__":
     data_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/")
     preprocess(data_path)
-    # study_inter_rater_variability(data_path)
-
-    # get patient summary statistics
-    # get_patient_characteristics(data_path)
