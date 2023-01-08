@@ -1,5 +1,5 @@
 # tumor-growth
-Analysis was performed using Python 3.7.9 on Win10. See requirements.txt for info regarding dependencies.
+Analysis was performed using Python 3.7.9 on macOS. See requirements.txt for info regarding dependencies.
 
 ## Info regarding variables:
 * OP_ID: Patients with IDs starting with "O" means that they got surgery (one tumor cluster will have disappeared between timestamps), while those starting with "P" have solely been followed at the outpatient clinic over time.
@@ -19,7 +19,6 @@ A total of 30 volumes have been (pseudo-randomly) picked at different timestamps
 * Per volume: same as above but from Per as annotator.
 * Dice: Dice score between the two annotated volumes.
 
-
 ## Implementation setup
 To perform the statistical analysis data was preprocessed in Python 3.7.9 using pandas and numpy.
-Regression analysis were conducted in R-4.2.1 for Windows through the rpy2 tool in Python.
+Regression analysis were conducted in R-4.2.1 through the rpy2 tool in Python.
