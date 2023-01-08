@@ -20,7 +20,7 @@ nlme = importr('nlme')
 car = importr('car')
 outliers = importr('outliers')
 minpack_lm = importr('minpack.lm')
-# nlsfit = importr('nlsfit')
+# nlsfit = importr('nlsfit')  # not compatible with R-4.2.2
 pandas2ri.activate()
 R = ro.r
 
