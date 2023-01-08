@@ -523,14 +523,14 @@ def preprocess(data_path):
     model = R.lm('Relative_Volume_Change ~ Follow_Up_Months', data=df_regression_association)
     summary_model = R.summary(model)
     print(summary_model)  # .rx2('coefficients'))
-    print("AIC:", stats.extractAIC(model))
+    # print("AIC:", stats.extractAIC(model))
 
     # exponential growth
     print("\nEXPONENTIAL:")
     model = R.lm('log(Relative_Volume_Change) ~ Follow_Up_Months', data=df_regression_association)
     summary_model = R.summary(model)
     print(summary_model)  # .rx2('coefficients'))
-    print("AIC:", stats.extractAIC(model))
+    # print("AIC:", stats.extractAIC(model))
 
     # linear radial growth
     print("\nLinear radial growth")
@@ -549,7 +549,7 @@ def preprocess(data_path):
 
     summary_model = R.summary(gomp_model)
     print(summary_model)
-    print("AIC:", stats.extractAIC(gomp_model))
+    # print("AIC:", stats.extractAIC(gomp_model))
 
     # gompertzian growth
     df_regression_association['Am'] = max(df_regression_association["Relative_Volume_Change"]) - \
@@ -576,7 +576,10 @@ def preprocess(data_path):
 
     summary_model = R.summary(gomp_model)
     print(summary_model)
-    print("AIC:", stats.extractAIC(gomp_model))
+    # print("AIC:", stats.extractAIC(gomp_model))
+
+    # save processed data frame as CSV on disk
+    df_association.to_csv("./data/merged_processed_regression_data_080123.csv")
 
 
 if __name__ == "__main__":
