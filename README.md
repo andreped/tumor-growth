@@ -5,7 +5,8 @@ Analysis was performed using Python 3.7.9 on macOS. See requirements.txt for inf
 ## Implementation setup
 The initial statistical analysis was performed in Python 3.7.9 mainly using pandas, numpy, and rpy2.
 Two-point regression analysis was conducted in R-4.2.2 through the rpy2 tool in Python.
-The time-series regression curve analysis was performed in Stata MP 17.
+The time-series regression curve analysis was performed in Stata/MP 17.
+The analysis was conducted on a MacBook Pro 2016, with Intel Core i7 CPU, 16 GB RAM, and macOS Monterey (v12.6) operating system.
 
 ## Info regarding variables:
 * OP_ID: Patients with IDs starting with "O" means that they got surgery (one tumor cluster will have disappeared between timestamps), while those starting with "P" have solely been followed at the outpatient clinic over time.
