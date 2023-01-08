@@ -21,4 +21,4 @@ A total of 30 volumes have been (pseudo-randomly) picked at different timestamps
 
 ## Implementation setup
 To perform the statistical analysis data was preprocessed in Python 3.7.9 using pandas and numpy.
-Regression analysis were conducted in R-4.2.1 through the rpy2 tool in Python.
+Regression analysis were conducted in R-4.2.2 through the rpy2 tool in Python.
