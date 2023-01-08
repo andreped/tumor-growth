@@ -1,5 +1,11 @@
 # tumor-growth
+Statistical analysis to assess meningioma tumour growth.
 Analysis was performed using Python 3.7.9 on macOS. See requirements.txt for info regarding dependencies.
+
+## Implementation setup
+The initial statistical analysis was performed in Python 3.7.9 mainly using pandas, numpy, and rpy2.
+Two-point regression analysis was conducted in R-4.2.2 through the rpy2 tool in Python.
+The time-series regression curve analysis was performed in Stata MP 17.
 
 ## Info regarding variables:
 * OP_ID: Patients with IDs starting with "O" means that they got surgery (one tumor cluster will have disappeared between timestamps), while those starting with "P" have solely been followed at the outpatient clinic over time.
@@ -18,7 +24,3 @@ A total of 30 volumes have been (pseudo-randomly) picked at different timestamps
 * Raw volume: Ground truth volume in ml, obtained after automatic segmentation and manual refinement (from Johanna/Kathrine).
 * Per volume: Same as above but from Per as annotator.
 * Dice: Dice score between the two annotated volumes.
-
-## Implementation setup
-To perform the statistical analysis data was preprocessed in Python 3.7.9 using pandas and numpy.
-Regression analysis were conducted in R-4.2.2 through the rpy2 tool in Python.
