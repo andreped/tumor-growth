@@ -68,17 +68,38 @@ estat ic
 
 
 
+** Interesting unicorn model from tutorial **
+//menl log_volume = {U[patient_n]} + ({b1})/(1 + exp(-(follow_up_months - {b2}) / {b3}))
+//estat ic
+
+
+//exit
+
+
+** Better unicorn **
+//menl log_volume = {phi1:}/(1+exp(-(follow_up_months-{phi2:})/{phi3:})), ///
+//    define(phi1: {b1} + {U1[patient_n]}) ///
+//	define(phi2: {b2} + {U2[patient_n]}) ///
+//    define(phi3: {b3} + {U3[patient_n]})
+
+
+
 ** Gompertzian regression **
 // @TODO: Adding factors outside of function (at y level), degrades log-likelihood!
 //   what's the correct place to put them? It fails to start if I put it next to
 //   the dependent variables inside the exp/log stuff
 //menl log_volume = {U[patient_n]} + log(1 / {U[patient_n]}) * exp(-{a1} * follow_up_months)
 local xb k:_cons 5.2993 \v0 -0.1509 \l0 4.4502
-menl log_volume = {U0[patient_n]} + {k0} + log({v0} / {k0}) * exp(-{a1} / {l0} * follow_up_months + ///
-	{b1} * initial_volume + {b2} * current_age_years ///
-	+ {b4} * spacing3) + {xb: i.gender_bin U1[patient_n]} + {xb: i.multifocality U2[patient_n]} ///
-	+ {xb: i.oedema U3[patient_n]} + {xb: i.t2 U4[patient_n]},  ///
-	initial(k0 5.2993 v0 0.1509 l0 4.4502)
+menl log_volume = {U0[patient_n]} + {k0} + log({v0} / {k0}) * ///
+	exp(-{a1} / {l0} * follow_up_months + ///
+	{b1} * initial_volume + {b2} * current_age_years + {b4} * spacing3 ///
+	), initial(k0 4.7993 v0 0.1509 l0 4.4502) ///
+	
+	// {xb: i.gender_bin U1[patient_n]}
+	
+	//+ {xb: i.gender_bin U1[patient_n]} + {xb: i.multifocality U2[patient_n]} ///
+	//+ {xb: i.oedema U3[patient_n]} + {xb: i.t2 U4[patient_n]}  ///
+	//, initial(k0 5.2993 v0 0.1509 l0 4.4502)
 // initial values gompertz, found in Python through rpy2: Am/Rd/LCP: 5.2992923110723495 -0.15090776979923248 4.450200080871582
 //menl log_volume = {U[patient_n]} + exp(-{xb:}), ///
 //	define(xb: {b0} * follow_up_months + {b1} * initial_volume + ///
