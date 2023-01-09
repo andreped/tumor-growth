@@ -9,8 +9,8 @@ clear
 //stset volume_change_relative
 
 // replace -999 with .a for relevant vectors
-//replace t2 = . if t2 == -999
-//replace oedema = . if oedema == -999
+replace t2 = . if t2 == -999
+replace oedema = . if oedema == -999
 
 //replace t2 = 4 if t2 == .
 //replace oedema = 4 if oedema == .
@@ -52,10 +52,12 @@ estat ic
 ** Exponential regression **
 gen log_volume = log(volume)
 //xtmixed log_volume follow_up_months current_age_years initial_volume || patient:, mle
-meglm log_volume follow_up_months initial_volume current_age_years i.gender_bin i.multifocality || patient:, family(gaussian) vce(robust)
+meglm log_volume follow_up_months initial_volume current_age_years ///
+	i.gender_bin i.multifocality i.t2 i.oedema || patient:, family(gaussian) vce(robust)
 estat ic
 
 
+exit
 
 
 ** Linear radial growth regression **
