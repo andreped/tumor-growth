@@ -306,8 +306,24 @@ def preprocess(data_path):
     # slice_thickness_filter = np.array(full_data_nonzero["Spacing3"]) < 2
     # full_data_nonzero = full_data_nonzero[slice_thickness_filter]
 
+    # remove patients with less than 3 timestamps
+    print(full_data_nonzero)
+    timestamp_lengths = []
+    for patient in np.unique(full_data_nonzero["Patient"]):
+        curr_patient_data = full_data_nonzero[full_data_nonzero["Patient"] == patient]
+        timestamps = curr_patient_data["Timestamp"]
+        # print(len(timestamps))
+        timestamp_lengths.append(len(timestamps))
+    print(np.unique(timestamp_lengths, return_counts=True))
+    print("-> All current patients have >= 3 timestamps with tumour volume > 0")
+    # exit()
+
     # create summary statistics for study - Table 1
     full_data_nonzero["Current_Age_Years"] = np.array(full_data_nonzero["Current_Age"]).astype("float32") / 365.25
+
+    # write current DataFrame to disk in the CSV format
+    full_data_nonzero.to_csv(os.path.join(data_path, "merged_longitudinal_data_090123.csv"))
+    # exit()
 
     # patient_filter_ = full_data_nonzero["Timestamp"] == "T1"
     # @TODO: After removing volumes with 0 size, some T1 points are now missing (FIXED BELOW)
@@ -579,9 +595,9 @@ def preprocess(data_path):
     # print("AIC:", stats.extractAIC(gomp_model))
 
     # save processed data frame as CSV on disk
-    df_association.to_csv("./data/merged_processed_regression_data_080123.csv")
+    df_association.to_csv(os.path.join(data_path, "merged_processed_regression_data_080123.csv"))
 
 
 if __name__ == "__main__":
-    data_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/")
+    data_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../data/")
     preprocess(data_path)
