@@ -239,6 +239,10 @@ def preprocess(data_path):
 
             full_data.loc[r, 'Birth_Year'] = byear_new_format
             full_data.loc[r, 'Gender'] = gender
+    
+    # convert gender to binary dummy variable (0: woman, 1: man), but keep old gender variable
+    full_data["Gender_bin"] = full_data["Gender"].copy()
+    full_data["Gender_bin"].replace(["woman", "man"], [0, 1], inplace=True)
 
     # add T2 and oedema information to full data frame
     full_data["T2"] = (-999 * np.ones(full_data.shape[0])).astype("str")
@@ -572,6 +576,9 @@ def preprocess(data_path):
                                       min(df_regression_association["Relative_Volume_Change"])
     df_regression_association['Rd'] = - min(df_regression_association["Relative_Volume_Change"])
     df_regression_association['LCP'] = max(df_regression_association["Relative_Volume_Change"]) - 1
+
+    print(df_regression_association['Am'][0], df_regression_association['Rd'][0], df_regression_association['LCP'][0])
+    exit()
 
     startvector = ro.ListVector({
         'Am': max(df_regression_association["Relative_Volume_Change"]) - min(df_regression_association["Relative_Volume_Change"]),
