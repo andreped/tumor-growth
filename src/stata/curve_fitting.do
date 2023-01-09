@@ -9,11 +9,11 @@ clear
 //stset volume_change_relative
 
 // replace -999 with .a for relevant vectors
-replace t2 = . if t2 == -999
-replace oedema = . if oedema == -999
+//replace t2 = . if t2 == -999
+//replace oedema = . if oedema == -999
 
-replace t2 = 4 if t2 == .
-replace oedema = 4 if oedema == .
+//replace t2 = 4 if t2 == .
+//replace oedema = 4 if oedema == .
 
 // convert string variable genders to categorical variable
 //encode gender, generate(gender_n)
@@ -89,10 +89,10 @@ estat ic
 //   what's the correct place to put them? It fails to start if I put it next to
 //   the dependent variables inside the exp/log stuff
 //menl log_volume = {U[patient_n]} + log(1 / {U[patient_n]}) * exp(-{a1} * follow_up_months)
-local xb k:_cons 5.2993 \v0 -0.1509 \l0 4.4502
 menl log_volume = {U0[patient_n]} + {k0} + log({v0} / {k0}) * ///
 	exp(-{a1} / {l0} * follow_up_months + ///
 	{b1} * initial_volume + {b2} * current_age_years + {b4} * spacing3 ///
+	+ {b5} * multifocality + {b6} * t2 + {b7} * oedema ///
 	), initial(k0 4.7993 v0 0.1509 l0 4.4502) ///
 	
 	// {xb: i.gender_bin U1[patient_n]}
