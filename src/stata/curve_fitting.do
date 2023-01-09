@@ -28,12 +28,16 @@ encode patient, generate(patient_n)
 //xtmixed volume follow_up_months current_age_years initial_volume || patient:, mle
 //xtmixed volume follow_up_months current_age_years initial_volume || patient:, mle //covariance(unstructured)
 //menl volume = {b0} + {b1} * follow_up_months //|| patient:, mle
-meglm volume follow_up_months initial_volume current_age_years i.gender_bin i.multifocality || patient:, family(gaussian) vce(robust)
+meglm volume follow_up_months initial_volume current_age_years ///
+	i.gender_bin i.multifocality i.multifocality i.t2 i.oedema ///
+	|| patient:, family(gaussian) vce(robust)
 //menl volume = {U[patient_n]} + {b0} + {b1} * follow_up_months
 // perform linear regression
 //nl (volume = {b0} + {b1} * follow_up_months + ///
 //	{b2} * initial_volume + {b3} * current_age_years + {b4} * gender_n)
 estat ic
+estat icc
+
 
 
 
@@ -41,7 +45,9 @@ estat ic
 ** Quadratic regression **
 gen follow_up_months2 = follow_up_months^2
 //xtmixed volume follow_up_months follow_up_months2 current_age_years initial_volume || patient:, mle
-meglm volume follow_up_months follow_up_months2 initial_volume current_age_years i.gender_bin i.multifocality || patient:, family(gaussian) vce(robust)
+meglm volume follow_up_months follow_up_months2 initial_volume ///
+	current_age_years i.gender_bin i.multifocality i.multifocality ///
+	i.t2 i.oedema || patient:, family(gaussian) vce(robust)
 //menl volume = {U[patient_n]} + {b0} + {b1} * follow_up_months * {b2} * follow_up_months^2
 estat ic
 
@@ -53,20 +59,28 @@ estat ic
 gen log_volume = log(volume)
 //xtmixed log_volume follow_up_months current_age_years initial_volume || patient:, mle
 meglm log_volume follow_up_months initial_volume current_age_years ///
-	i.gender_bin i.multifocality i.t2 i.oedema || patient:, family(gaussian) vce(robust)
+	i.gender_bin i.multifocality i.t2 i.oedema ///
+	|| patient:, family(gaussian) vce(robust)
 estat ic
 
+// NOTE: Exp only better when T2 and Oedema is added because missing values in
+//  t2 and oedema were removed!!! Hence, why "more" variance was explained!
 
-exit
+estat icc
+
+
 
 
 ** Linear radial growth regression **
+// @TODO: Are we introducing the multi-level information correct? That is
+//   is it sufficient to write {U[patient_n]} to introduce it as a random
+//   intercept to introduce a two-level regression model? Not sure...
 gen const_ = log(4 * c(pi) / 3)
 menl log_volume = {U[patient_n]} + log(4 * c(pi) / 3) + /// 
 	3 * log({r0} + {a0} * follow_up_months + {b1} * initial_volume + ///
-	{b2} * current_age_years + {b3} * gender_bin)
+	{b2} * current_age_years + {b3} * gender_bin + {b4} * multifocality + ///
+	{b5} * t2 + {b6} * oedema)
 estat ic
-
 
 
 
@@ -110,3 +124,6 @@ menl log_volume = {U0[patient_n]} + {k0} + log({v0} / {k0}) * ///
 	//{b1} * initial_volume + {b2} * current_age_years + ///
 	//{b3} * i.gender_bin + {b4} * i.multifocality
 estat ic
+//estat icc
+
+
