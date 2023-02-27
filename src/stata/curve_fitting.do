@@ -99,6 +99,12 @@ estat ic
 //    define(phi3: {b3} + {U3[patient_n]})
 
 
+stset log_volume
+streg follow_up_months gender_bin initial_volume current_age_years spacing3 ///
+	multifocality t2 oedema, d(gompertz)
+
+exit()
+
 
 ** Gompertzian regression **
 // @TODO: Adding factors outside of function (at y level), degrades log-likelihood!
@@ -109,7 +115,7 @@ menl log_volume = {U0[patient_n]} + {k0} + log({v0} / {k0}) * ///
 	exp(-{a1} / {l0} * follow_up_months + ///
 	{b1} * initial_volume + {b2} * current_age_years + {b4} * spacing3 ///
 	+ {b5} * multifocality + {b6} * t2 + {b7} * oedema ///
-	), initial(k0 4.7993 v0 0.1509 l0 4.4502) ///
+	), initial(k0 4.7993 v0 0.1509 l0 4.4502), by(gender_bin) ///
 	
 	// {xb: i.gender_bin U1[patient_n]}
 	
