@@ -1,11 +1,9 @@
 import pandas as pd
-import os
 import numpy as np
+import os
+import scipy
 from utils import sort_timestamps, remove_surgery_patients, str2datetime, get_earliest_timestamp,\
     get_last_timestamp
-from statistics import kruskal_wallis_test_prompt, test_univariate_normality, wilcox_test_custom
-import matplotlib.pyplot as plt
-import scipy
 
 
 def preprocess(data_path):
