@@ -2,11 +2,12 @@ import pandas as pd
 import numpy as np
 import os
 from scipy import stats
+from argparse import ArgumentParser
 from utils import sort_timestamps, remove_surgery_patients, str2datetime, get_earliest_timestamp,\
     get_last_timestamp
 
 
-def preprocess(data_path):
+def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=False):
     cohort_personal_info = pd.read_csv(os.path.join(data_path, "cohort_personal_info.csv"))
     cohort_volumes_quality = pd.read_csv(os.path.join(data_path, "cohort_volumes_quality-filtered.csv"))
     volumes = pd.read_csv(os.path.join(data_path, "volumes.csv"))
@@ -16,26 +17,36 @@ def preprocess(data_path):
     # get unique patients
     patients = cohort_personal_info["Patient"]
 
-    # remove all patients that have had surgery
-    patients_no_surgery, patient_filter = remove_surgery_patients(patients)
+    if remove_surgery:
+        print("Filtering patients who underwent surgery...")
+        # remove all patients that have had surgery
+        patients_no_surgery, patient_filter = remove_surgery_patients(patients)
 
-    # filter other datasets by selected patients
-    cohort_personal_info_filtered = cohort_personal_info[patient_filter]
+        # filter other datasets by selected patients
+        cohort_personal_info_filtered = cohort_personal_info[patient_filter]
 
-    filter_ = [x in patients_no_surgery for x in cohort_volumes_quality["Patient"]]
-    filtered_cohort_volumes_quality = cohort_volumes_quality[filter_]
+        filter_ = [x in patients_no_surgery for x in cohort_volumes_quality["Patient"]]
+        filtered_cohort_volumes_quality = cohort_volumes_quality[filter_]
 
-    filter_ = [x in patients_no_surgery for x in volumes["OP_ID"]]
-    filtered_volumes = volumes[filter_]
+        filter_ = [x in patients_no_surgery for x in volumes["OP_ID"]]
+        filtered_volumes = volumes[filter_]
 
-    filter_ = [x in patients_no_surgery for x in t2_oedema["Patient"]]
-    filtered_t2_oedema = t2_oedema[filter_]
+        filter_ = [x in patients_no_surgery for x in t2_oedema["Patient"]]
+        filtered_t2_oedema = t2_oedema[filter_]
+
+        del patient_filter  # to avoid using this variable by accident for something else later
+
+    else:
+        print("Keeping patients who underwent surgery...")
+        cohort_personal_info_filtered = cohort_personal_info.copy()
+        filtered_cohort_volumes_quality = cohort_volumes_quality.copy()
+        filtered_volumes = volumes.copy()
+        filtered_t2_oedema = t2_oedema.copy()
 
     # 1) First assumption (lets sum all fragmented tumors together into one - total tumor volume in patient,
     #  for each time point). Use cohort volumes quality to catch all patients and time points
     data = []
     unique_patients = np.unique(list(filtered_volumes["OP_ID"]))
-    # np.random.shuffle(unique_patients)
     iter = 0
     for pat in unique_patients:
         # get all data for current patient
@@ -223,7 +234,8 @@ def preprocess(data_path):
     full_data_nonzero["Current_Age_Years"] = np.array(full_data_nonzero["Current_Age"]).astype("float32") / 365.25
 
     # write current DataFrame to disk in the CSV format
-    # full_data_nonzero.to_csv(os.path.join(data_path, "merged_longitudinal_data_090123.csv"))
+    if export_csv:
+        full_data_nonzero.to_csv(os.path.join(data_path, "merged_longitudinal_data_060323.csv"))
 
     # patient_filter_ = full_data_nonzero["Timestamp"] == "T1"
     # @TODO: After removing volumes with 0 size, some T1 points are now missing (FIXED BELOW)
@@ -371,20 +383,27 @@ def preprocess(data_path):
         "volume_change_categorical": volume_change_categorical,
     })
 
-    df_association_dropped_na = df_association.copy()
-    df_association_dropped_na["T2"] = t2_hyperintense_orig
-    df_association_dropped_na["oedema"] = oedema_orig
-    df_association_dropped_na = df_association_dropped_na.dropna()
-    df_association_dropped_na["T2"] = df_association_dropped_na["T2"].astype(int)
-    df_association_dropped_na["oedema"] = df_association_dropped_na["oedema"].astype(int)
-    df_association_dropped_na["yearly_growth"] = df_association["yearly_growth"]
-
     # save processed data frame as CSV on disk
-    # df_association.to_csv(os.path.join(data_path, "merged_processed_regression_data_080123.csv"))
+    if export_csv:
+        df_association.to_csv(os.path.join(
+            data_path, "merged_processed_regression_data_060323_remove_surgery_" + str(remove_surgery) + ".csv")
+        )
 
 
 if __name__ == "__main__":
+    parser = ArgumentParser()
+    parser.add_argument("-r", "--remove-surgery", action='store_true',
+                        help="Whether to remove patients that had surgery.")
+    parser.add_argument("-e", "--export-csv", action='store_true',
+                        help="Whether to export generated tables as CSVs.")
+    args = parser.parse_args()
+    print("arguments:", args)
+
     data_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../data/")
-    preprocess(data_path)
+    
+    if not os.path.isdir(data_path):
+        raise ValueError("data/ directory was not found. Please, ensure that the data/ directory is placed at the same level as src/.")
+
+    preprocess(data_path=data_path, remove_surgery=args.remove_surgery, export_csv=args.export_csv)
 
     print("Finished!")
