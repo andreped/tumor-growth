@@ -6,7 +6,7 @@ The initial statistical analysis was performed in Python 3.7.9 on macOS (12.6 Mo
 * [pandas==1.3.5](https://pypi.org/project/pandas/1.3.5/)
 * [scipy==1.7.3](https://pypi.org/project/scipy/1.7.3/)
 
-The growth analysis was performed using Stata/MP 17 using the [menl](https://www.stata.com/manuals/memenl.pdf) library.
+The growth analysis was performed using [Stata/MP 17](https://www.stata.com/statamp/) using the [menl](https://www.stata.com/manuals/memenl.pdf) library.
 
 ## Project structure
 The source code in this project expects some structure on the data, and was tailored for this application and not meant to generalize to new datasets and applications.
