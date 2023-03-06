@@ -8,71 +8,9 @@ import matplotlib.pyplot as plt
 import scipy
 
 
-def study_inter_rater_variability(data_path):
-    interrater_variability_study = pd.read_csv(os.path.join(data_path, "interrater_variability_study.csv"))
-
-    print(interrater_variability_study)
-
-    volume = interrater_variability_study["Raw volume"]
-    dice = interrater_variability_study.Dice
-
-    print(volume)
-    print(dice)
-
-    x = interrater_variability_study["Raw volume"].astype("float32")
-    y = interrater_variability_study["Per volume"].astype("float32")
-
-    mu = np.mean([x, y], axis=0)
-    diff = x - y
-    md = np.mean(diff)
-    sd = np.std(diff, axis=0)
-
-    print(md, sd)
-    print(mu - 1.96 * sd, mu + 1.96 * sd)
-
-    # outlier detection
-    outliers = (diff > md + 1.96 * sd) | (diff < md - 1.96 * sd)
-    outliers = np.array(outliers)
-
-    print(diff > md + 1.96 * sd)
-    print(outliers)
-    print(sum(outliers))
-
-    x = np.array(x)
-    y = np.array(y)
-
-    x_filtered = x[np.logical_not(outliers)]
-    y_filtered = y[np.logical_not(outliers)]
-
-    # redo bland-altman plot
-    mu = np.mean([x_filtered, y_filtered], axis=0)
-    diff = x_filtered - y_filtered
-    md = np.mean(diff)
-    sd = np.std(diff, axis=0)
-
-    plt.scatter(mu, diff)
-    plt.axhline(md, color='gray', linestyle='--')
-    plt.axhline(md + 1.96 * sd, color='gray', linestyle='--')
-    plt.axhline(md - 1.96 * sd, color='gray', linestyle='--')
-
-    # print((diff < md - 1.96 * sd) or (diff > md + 1.96 * sd))
-
-    plt.title('Bland-Altman Plot')
-    plt.show()
-
-    #sns.scatterplot(x, y)
-    #plt.show()
-
-
-def get_patient_characteristics(data_path):
-    cohort_personal_info = pd.read_csv(os.path.join(data_path, "cohort_personal_info.csv"))
-    print(cohort_personal_info)
-
-
 def preprocess(data_path):
     cohort_personal_info = pd.read_csv(os.path.join(data_path, "cohort_personal_info.csv"))
     cohort_volumes_quality = pd.read_csv(os.path.join(data_path, "cohort_volumes_quality-removed_P09016-T6.csv"))
-    # interrater_variability_study = pd.read_csv(os.path.join(data_path, "interrater_variability_study.csv"))  # not considered for now
     volumes = pd.read_csv(os.path.join(data_path, "Volumes.csv"))
     t2_oedema = pd.read_csv(os.path.join(data_path, "T2_and_peritumorial_oedema.csv"), sep=";")
     scanner_info = pd.read_csv(os.path.join(data_path, "scanners_info.csv"), sep=",")
