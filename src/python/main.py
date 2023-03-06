@@ -4,25 +4,8 @@ import numpy as np
 from utils import sort_timestamps, remove_surgery_patients, str2datetime, get_earliest_timestamp,\
     get_last_timestamp
 from statistics import kruskal_wallis_test_prompt, test_univariate_normality, wilcox_test_custom
-import seaborn as sns
-from rpy2 import robjects as ro
-from rpy2.robjects import pandas2ri, numpy2ri
-from rpy2.robjects.packages import importr
 import matplotlib.pyplot as plt
 import scipy
-from scipy.stats import spearmanr
-
-
-# R-related imports
-stats = importr('stats')
-base = importr('base')
-nlme = importr('nlme')
-car = importr('car')
-outliers = importr('outliers')
-minpack_lm = importr('minpack.lm')
-# nlsfit = importr('nlsfit')  # not compatible with R-4.2.2
-pandas2ri.activate()
-R = ro.r
 
 
 def study_inter_rater_variability(data_path):
