@@ -217,10 +217,8 @@ def preprocess(data_path):
     for patient in np.unique(full_data_nonzero["Patient"]):
         curr_patient_data = full_data_nonzero[full_data_nonzero["Patient"] == patient]
         timestamps = curr_patient_data["Timestamp"]
-        # print(len(timestamps))
         timestamp_lengths.append(len(timestamps))
     print(np.unique(timestamp_lengths, return_counts=True))
-    # print(full_data_nonzero.shape)
     print("-> All current patients have >= 3 timestamps with tumour volume > 0")
 
     # create summary statistics for study - Table 1
@@ -246,13 +244,11 @@ def preprocess(data_path):
 
     t2_hyperintense_orig = np.array(full_data_nonzero["T2"][patient_filter_])
     t2_hyperintense_orig[t2_hyperintense_orig == '-999.0'] = np.nan
-    #t2_hyperintense = t2_hyperintense_orig[t2_hyperintense_orig != '-999.0']
     t2_hyperintense = t2_hyperintense_orig[~pd.isnull(t2_hyperintense_orig)]
     t2_hyperintense = np.array([int(x) for x in t2_hyperintense])
 
     oedema_orig = np.array(full_data_nonzero["Oedema"][patient_filter_])
     oedema_orig[oedema_orig == "-999.0"] = np.nan
-    #oedema = oedema_orig[oedema_orig != '-999.0']
     oedema = oedema_orig[~pd.isnull(oedema_orig)]
     oedema = np.array([int(x) for x in oedema])
 
@@ -282,7 +278,6 @@ def preprocess(data_path):
     for patient in patients:
         curr = full_data_nonzero[full_data_nonzero["Patient"] == patient]
         first_timestamp = get_earliest_timestamp(curr["Timestamp"])
-        # first_timestamp = np.array(curr["Timestamp"][curr["Earliest_Timestamp"] == 1])
         last_timestamp = get_last_timestamp(curr["Timestamp"])
         initial_size = np.array(curr[curr["Timestamp"] == first_timestamp]["Volume"])[0]
         final_size = np.array(curr[curr["Timestamp"] == last_timestamp]["Volume"])[0]
@@ -310,7 +305,6 @@ def preprocess(data_path):
     yearly_growth = np.array(volume_change_relative) / (np.array(total_follow_up_days) / 356.25)
 
     N = len(age_at_T1)
-    # print(age_at_T1)
     print("total number of patients:", len(age_at_T1))
     print("age: median/IQR/min/max:", np.round(np.median(age_at_T1), 1), np.round(scipy.stats.iqr(age_at_T1), 1),
           np.round(np.min(age_at_T1), 1), np.round(np.max(age_at_T1), 1))
