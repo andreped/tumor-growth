@@ -285,8 +285,6 @@ def preprocess(data_path):
     # @TODO: Should normalize the variables in some way to avoid exploding stuff issues
     #   - perhaps age in years (instead of in days) make more sense?
 
-    print(full_data_nonzero.head(40))
-
     # capture outliers and remove them - assuming normality using quantiles
     #lower = R.quantile(full_data_nonzero["Relative_Volume_Ratio"], 0.025)[0]
     #higher = R.quantile(full_data_nonzero["Relative_Volume_Ratio"], 0.975)[0]
@@ -298,14 +296,12 @@ def preprocess(data_path):
     # filter patients that show no growth? - how to determine if tumor has grown?
     # Look at first and last timestep volume size?
     volume_change = full_data_nonzero["Final_Volume"] - full_data_nonzero["Initial_Volume"]
-    print(volume_change)
 
     # remove patients with slice thickness higher or equal than X
     # slice_thickness_filter = np.array(full_data_nonzero["Spacing3"]) < 2
     # full_data_nonzero = full_data_nonzero[slice_thickness_filter]
 
     # remove patients with less than 3 timestamps
-    print(full_data_nonzero)
     timestamp_lengths = []
     for patient in np.unique(full_data_nonzero["Patient"]):
         curr_patient_data = full_data_nonzero[full_data_nonzero["Patient"] == patient]
@@ -313,15 +309,14 @@ def preprocess(data_path):
         # print(len(timestamps))
         timestamp_lengths.append(len(timestamps))
     print(np.unique(timestamp_lengths, return_counts=True))
+    # print(full_data_nonzero.shape)
     print("-> All current patients have >= 3 timestamps with tumour volume > 0")
-    # exit()
 
     # create summary statistics for study - Table 1
     full_data_nonzero["Current_Age_Years"] = np.array(full_data_nonzero["Current_Age"]).astype("float32") / 365.25
 
     # write current DataFrame to disk in the CSV format
-    full_data_nonzero.to_csv(os.path.join(data_path, "merged_longitudinal_data_090123.csv"))
-    # exit()
+    # full_data_nonzero.to_csv(os.path.join(data_path, "merged_longitudinal_data_090123.csv"))
 
     # patient_filter_ = full_data_nonzero["Timestamp"] == "T1"
     # @TODO: After removing volumes with 0 size, some T1 points are now missing (FIXED BELOW)
@@ -381,11 +376,6 @@ def preprocess(data_path):
         initial_size = np.array(curr[curr["Timestamp"] == first_timestamp]["Volume"])[0]
         final_size = np.array(curr[curr["Timestamp"] == last_timestamp]["Volume"])[0]
 
-        print("--")
-        print(initial_size, final_size)
-        print(curr["Initial_Volume"])
-        print(curr["Final_Volume"])
-
         relative_change = (final_size - initial_size) / initial_size
         initial_size = float(initial_size)
         final_size = float(final_size)
@@ -408,12 +398,12 @@ def preprocess(data_path):
     # get yearly growth
     yearly_growth = np.array(volume_change_relative) / (np.array(total_follow_up_days) / 356.25)
 
-    print(full_data_nonzero)
     N = len(age_at_T1)
     # print(age_at_T1)
+    print("total number of patients:", len(age_at_T1))
     print("age: median/IQR/min/max:", np.round(np.median(age_at_T1), 1), np.round(scipy.stats.iqr(age_at_T1), 1),
           np.round(np.min(age_at_T1), 1), np.round(np.max(age_at_T1), 1))
-    print("gender (count/%):", sum(genders == "woman"), np.mean(genders == "woman"))
+    print("gender (women count/%):", sum(genders == "woman"), np.mean(genders == "woman"))
     print("initial volume size at T1: (median/IQR/min/max):", np.round(np.median(init_volume_size), 1),
           np.round(scipy.stats.iqr(init_volume_size), 1), np.round(np.min(init_volume_size), 1),
           np.round(np.max(init_volume_size), 1))
@@ -437,7 +427,7 @@ def preprocess(data_path):
           len(volume_grew), len(volume_no_change), len(volume_shrank), "| % |",
           np.round(len(volume_grew) / N, 3),
           np.round(len(volume_no_change) / N, 3),
-          np.round(len(volume_shrank) / N), 3)
+          np.round(len(volume_shrank) / N, 3))
     print("slice thickness: (median/IQR/min/max):",
           np.round(np.median(slice_thickness), 3),
           np.round(scipy.stats.iqr(slice_thickness), 3), np.round(np.min(slice_thickness), 3),
@@ -453,8 +443,6 @@ def preprocess(data_path):
           np.unique(full_data_nonzero["Model_Name"], return_counts=True)[1] / len(full_data_nonzero))
     print("Tesla (count + %):", np.unique(full_data_nonzero["Tesla"], return_counts=True),
           np.unique(full_data_nonzero["Tesla"], return_counts=True)[1] / len(full_data_nonzero))
-
-    print(wilcox_test_custom(yearly_growth))
 
     # T2 hyperintense signal - calculate summary statistics
     tmp = np.unique(t2_hyperintense, return_counts=True)
