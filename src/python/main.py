@@ -190,12 +190,6 @@ def preprocess(data_path):
 
             # check if earliest timestamp, store categorical value
             earliest_timestamp = int(timestamp == init_timestamp)
-            #if earliest_timestamp == 1:
-            #    print(timestamp)
-            #    print(init_timestamp)
-            #    print(earliest_timestamp)
-            #    print(curr_volume)
-            #    print()
 
             # translate current date to datetime format
             curr_date = str2datetime(curr_date)
@@ -470,16 +464,6 @@ def preprocess(data_path):
     print("Oedema (counts for 0/1 categories):",
           tmp, tmp[1] / len(oedema))
 
-    # perform ANOVA to assess the association between tumor growth and different variables
-    # 1) first test for normality
-    print("Univariate normality tests:")
-    print("p-value tumor growth:", test_univariate_normality(volume_change, full_data_nonzero))
-    print("p-value Age:", test_univariate_normality(volume_change_relative, full_data_nonzero))
-    print("p-value Slice thickness:", test_univariate_normality(full_data_nonzero["Spacing3"], full_data_nonzero))
-    # print("p-value T2:", test_univariate_normality(full_data_nonzero["T2"]))
-    # print("p-value Oedema:", test_univariate_normality(full_data_nonzero["Oedema"]))
-    # -> Data is NOT normal! Cannot perform ordinary ANOVA analysis
-
     # create temporary dataframe to store data relevant for statistical analysis
     df_association = pd.DataFrame({
         "volume_change": volume_change,
@@ -504,107 +488,12 @@ def preprocess(data_path):
     df_association_dropped_na["oedema"] = df_association_dropped_na["oedema"].astype(int)
     df_association_dropped_na["yearly_growth"] = df_association["yearly_growth"]
 
-    for var in ["age_at_T1", "total_follow_up_months", "init_volume_size", "Spacing3"]:
-        corr_ = spearmanr(df_association["yearly_growth"], df_association[var])
-        print("spearman correlation (" + var + "):", corr_, "\n")
-
-    for var in ["genders", "T2", "oedema", "Multifocality"]:
-        kruskal_wallis_test_prompt(var, data=df_association_dropped_na)
-
-    print("\nHandle growth as a categorical variable:\n")
-    for var in ["age_at_T1", "total_follow_up_months", "init_volume_size", "Spacing3"] + \
-               ["genders", "T2", "oedema", "Multifocality"]:
-        print("var:", var)
-        if var in ["age_at_T1", "total_follow_up_months", "init_volume_size", "Spacing3"]:
-            curr_formula = stats.as_formula('factor(' + var + ') ~ factor(volume_change_categorical)')
-            result = stats.kruskal_test(curr_formula, data=df_association, **{'na.action': stats.na_omit})
-            print("Kruskal wallis test, volume_change_categorical vs " + var + ". p-value:", result.rx2('p.value')[0])
-        else:
-            result = stats.chisq_test(df_association["yearly_growth"], df_association[var])
-            print("Chisq test, volume_change_categorical vs " + var + ". p-value:", result.rx2('p.value')[0])
-
-
-    print("\n######\n", "Now, lets study the growth pattern only for the tumours that grew")
-
-    # df_association_grew_only = df_association[df_association["volume_change_categorical"] == 1]
-
-    full_data_nonzero_grew_only = full_data_nonzero[full_data_nonzero["Relative_Volume_Change"] > 0.15]
-
-    print(list(full_data_nonzero_grew_only.keys()))
-    print(full_data_nonzero_grew_only)
-
-    df_regression_association = pd.DataFrame({
-        "Relative_Volume_Change": full_data_nonzero_grew_only["Relative_Volume_Change"],
-        "Follow_Up_Months": full_data_nonzero_grew_only["Follow_Up_Months"],
-    })
-
-    # linear growth
-    print("\nLINEAR:")
-    model = R.lm('Relative_Volume_Change ~ Follow_Up_Months', data=df_regression_association)
-    summary_model = R.summary(model)
-    print(summary_model)  # .rx2('coefficients'))
-    # print("AIC:", stats.extractAIC(model))
-
-    # exponential growth
-    print("\nEXPONENTIAL:")
-    model = R.lm('log(Relative_Volume_Change) ~ Follow_Up_Months', data=df_regression_association)
-    summary_model = R.summary(model)
-    print(summary_model)  # .rx2('coefficients'))
-    # print("AIC:", stats.extractAIC(model))
-
-    # linear radial growth
-    print("\nLinear radial growth")
-    df_regression_association['Am'] = max(df_regression_association["Relative_Volume_Change"]) - \
-                                      min(df_regression_association["Relative_Volume_Change"])
-    df_regression_association['Rd'] = - min(df_regression_association["Relative_Volume_Change"])
-    df_regression_association['LCP'] = max(df_regression_association["Relative_Volume_Change"]) - 1
-    startvector = ro.ListVector({
-        'Am': max(df_regression_association["Relative_Volume_Change"]) - min(
-            df_regression_association["Relative_Volume_Change"]),
-        'Rd': - min(df_regression_association["Relative_Volume_Change"]),
-        'LCP': max(df_regression_association["Relative_Volume_Change"]) - 1
-    })
-    gomp_model = minpack_lm.nlsLM("Relative_Volume_Change ~ Am * (1 - ((1 - Rd/Am))^(1 - (Follow_Up_Months / LCP)))",
-                                  start=startvector, data=df_regression_association)
-
-    summary_model = R.summary(gomp_model)
-    print(summary_model)
-    # print("AIC:", stats.extractAIC(gomp_model))
-
-    # gompertzian growth
-    df_regression_association['Am'] = max(df_regression_association["Relative_Volume_Change"]) - \
-                                      min(df_regression_association["Relative_Volume_Change"])
-    df_regression_association['Rd'] = - min(df_regression_association["Relative_Volume_Change"])
-    df_regression_association['LCP'] = max(df_regression_association["Relative_Volume_Change"]) - 1
-
-    print(df_regression_association['Am'][0], df_regression_association['Rd'][0], df_regression_association['LCP'][0])
-    exit()
-
-    startvector = ro.ListVector({
-        'Am': max(df_regression_association["Relative_Volume_Change"]) - min(df_regression_association["Relative_Volume_Change"]),
-        'Rd': - min(df_regression_association["Relative_Volume_Change"]),
-        'LCP': max(df_regression_association["Relative_Volume_Change"]) - 1
-    })
-
-    print(np.unique(df_regression_association["Relative_Volume_Change"]))
-    print(np.unique(df_regression_association["Follow_Up_Months"]))
-    #gomp_model = stats.nls("log(Relative_Volume_Change) ~ SSgompertz(log(Follow_Up_Months+1), Asym, b2, b3)",
-    #                       data=df_regression_association)
-    #data = dat,
-    #       start = list(y0=0.15, ymax=7, k=0.5, lag=3))
-    # gomp_model = stats.nls(gomp_formula, data=df_regression_association, start=startvector)
-
-    gomp_model = minpack_lm.nlsLM("Relative_Volume_Change ~ Am * (1 - ((1 - Rd/Am))^(1 - (Follow_Up_Months / LCP)))",
-                                  start=startvector, data=df_regression_association)
-
-    summary_model = R.summary(gomp_model)
-    print(summary_model)
-    # print("AIC:", stats.extractAIC(gomp_model))
-
     # save processed data frame as CSV on disk
-    df_association.to_csv(os.path.join(data_path, "merged_processed_regression_data_080123.csv"))
+    # df_association.to_csv(os.path.join(data_path, "merged_processed_regression_data_080123.csv"))
 
 
 if __name__ == "__main__":
     data_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../data/")
     preprocess(data_path)
+
+    print("Finished!")
