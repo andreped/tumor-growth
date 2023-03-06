@@ -119,6 +119,7 @@ def preprocess(data_path):
                          nb_timestamps, initial_volume, last_volume, first_timestamp_date,
                          last_timestamp_date, curr_date, curr_volume])
             iter += 1
+
     data = np.array(data)
 
     # merge this with the cohort volumes quality stuff
@@ -202,17 +203,6 @@ def preprocess(data_path):
     # get relative volume ratios between scans
     relative_volume_ratio = full_data_nonzero["Volume"] / full_data_nonzero["Initial_Volume"]
     full_data_nonzero["Relative_Volume_Ratio"] = relative_volume_ratio.astype("float32")
-
-    # @TODO: Should normalize the variables in some way to avoid exploding stuff issues
-    #   - perhaps age in years (instead of in days) make more sense?
-
-    # capture outliers and remove them - assuming normality using quantiles
-    #lower = R.quantile(full_data_nonzero["Relative_Volume_Ratio"], 0.025)[0]
-    #higher = R.quantile(full_data_nonzero["Relative_Volume_Ratio"], 0.975)[0]
-
-    #x = np.array(full_data_nonzero["Relative_Volume_Ratio"])
-    #filter_ = (x > lower) & (x < higher)
-    #full_data_nonzero = full_data_nonzero[filter_]
 
     # filter patients that show no growth? - how to determine if tumor has grown?
     # Look at first and last timestep volume size?
