@@ -3,7 +3,7 @@ This project contains the source code relevant for the study titled _"Growth pat
 
 ## Implementation setup
 
-The initial statistical analysis was performed in Python 3.7.9 on macOS (12.0 Monterey) using the following libraries:
+The initial statistical analysis was performed in Python 3.7.9 on macOS (12.6 Monterey) using the following libraries:
 * pandas==1.3.5
 * scipy==1.7.3
 
