@@ -1,15 +1,15 @@
 import pandas as pd
 import numpy as np
 import os
-import scipy
+from scipy import stats
 from utils import sort_timestamps, remove_surgery_patients, str2datetime, get_earliest_timestamp,\
     get_last_timestamp
 
 
 def preprocess(data_path):
     cohort_personal_info = pd.read_csv(os.path.join(data_path, "cohort_personal_info.csv"))
-    cohort_volumes_quality = pd.read_csv(os.path.join(data_path, "cohort_volumes_quality-removed_P09016-T6.csv"))
-    volumes = pd.read_csv(os.path.join(data_path, "Volumes.csv"))
+    cohort_volumes_quality = pd.read_csv(os.path.join(data_path, "cohort_volumes_quality-filtered.csv"))
+    volumes = pd.read_csv(os.path.join(data_path, "volumes.csv"))
     t2_oedema = pd.read_csv(os.path.join(data_path, "T2_and_peritumorial_oedema.csv"), sep=";")
     scanner_info = pd.read_csv(os.path.join(data_path, "scanners_info.csv"), sep=",")
 
@@ -304,27 +304,27 @@ def preprocess(data_path):
 
     N = len(age_at_T1)
     print("total number of patients:", len(age_at_T1))
-    print("age: median/IQR/min/max:", np.round(np.median(age_at_T1), 1), np.round(scipy.stats.iqr(age_at_T1), 1),
+    print("age: median/IQR/min/max:", np.round(np.median(age_at_T1), 1), np.round(stats.iqr(age_at_T1), 1),
           np.round(np.min(age_at_T1), 1), np.round(np.max(age_at_T1), 1))
     print("gender (women count/%):", sum(genders == "woman"), np.mean(genders == "woman"))
     print("initial volume size at T1: (median/IQR/min/max):", np.round(np.median(init_volume_size), 1),
-          np.round(scipy.stats.iqr(init_volume_size), 1), np.round(np.min(init_volume_size), 1),
+          np.round(stats.iqr(init_volume_size), 1), np.round(np.min(init_volume_size), 1),
           np.round(np.max(init_volume_size), 1))
     print("number of MRI scans per patient: (median/IQR/min/max):", np.round(np.median(number_of_mri_scans), 1),
-          np.round(scipy.stats.iqr(number_of_mri_scans), 1), np.round(np.min(number_of_mri_scans), 1),
+          np.round(stats.iqr(number_of_mri_scans), 1), np.round(np.min(number_of_mri_scans), 1),
           np.round(np.max(number_of_mri_scans), 1))
     print("total follow up in months: (median/IQR/min/max):", np.round(np.median(total_follow_up_months), 1),
-          np.round(scipy.stats.iqr(total_follow_up_months), 1), np.round(np.min(total_follow_up_months), 1),
+          np.round(stats.iqr(total_follow_up_months), 1), np.round(np.min(total_follow_up_months), 1),
           np.round(np.max(total_follow_up_months), 1))
     print("volume change (T1 to T-last): (median/IQR/min/max):", np.round(np.median(volume_change), 1),
-          np.round(scipy.stats.iqr(volume_change), 1), np.round(np.min(volume_change), 1),
+          np.round(stats.iqr(volume_change), 1), np.round(np.min(volume_change), 1),
           np.round(np.max(volume_change), 1))
     print("relative volume change (T1 to T-last): (median/IQR/min/max):", np.round(np.median(volume_change_relative), 3),
-          np.round(scipy.stats.iqr(volume_change_relative), 3), np.round(np.min(volume_change_relative), 3),
+          np.round(stats.iqr(volume_change_relative), 3), np.round(np.min(volume_change_relative), 3),
           np.round(np.max(volume_change_relative), 3))
     print("yearly relative growth (T1 to T-last): (median/IQR/min/max):",
           np.round(np.median(yearly_growth), 3),
-          np.round(scipy.stats.iqr(yearly_growth), 3), np.round(np.min(yearly_growth), 3),
+          np.round(stats.iqr(yearly_growth), 3), np.round(np.min(yearly_growth), 3),
           np.round(np.max(yearly_growth), 3))
     print("number of patients with tumors that grew/no change/shrank:",
           len(volume_grew), len(volume_no_change), len(volume_shrank), "| % |",
@@ -333,12 +333,12 @@ def preprocess(data_path):
           np.round(len(volume_shrank) / N, 3))
     print("slice thickness: (median/IQR/min/max):",
           np.round(np.median(slice_thickness), 3),
-          np.round(scipy.stats.iqr(slice_thickness), 3), np.round(np.min(slice_thickness), 3),
+          np.round(stats.iqr(slice_thickness), 3), np.round(np.min(slice_thickness), 3),
           np.round(np.max(slice_thickness), 3))
     print("multifocality (count + %):", sum(multifocality), sum(multifocality) / len(multifocality))
     print("clusters total: (median/IQR/min/max):",
           np.round(np.median(Clusters_total), 3),
-          np.round(scipy.stats.iqr(Clusters_total), 3), np.round(np.min(Clusters_total), 3),
+          np.round(stats.iqr(Clusters_total), 3), np.round(np.min(Clusters_total), 3),
           np.round(np.max(Clusters_total), 3))
     print("Manufacturer (count + %):", np.unique(full_data_nonzero["Manufacturer"], return_counts=True),
           np.unique(full_data_nonzero["Manufacturer"], return_counts=True)[1] / len(full_data_nonzero))
