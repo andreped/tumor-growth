@@ -19,7 +19,6 @@ def get_last_timestamp(input_):
     return "T" + str(value)
 
 
-
 def remove_surgery_patients(patients):
     filter_ = []
     for pat in patients:
