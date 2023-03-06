@@ -1,5 +1,5 @@
 # tumor-growth
-This project contains the source code relevant for the study entitled _"Growth patterns of meningiomas followed by repeated MRI scans"_.
+This project contains the source code relevant for the study titled _"Growth patterns of meningiomas followed by repeated MRI scans"_.
 
 ## Implementation setup
 
@@ -39,7 +39,7 @@ source venv/bin/activate
 
 2. Install Python dependencies:
 ```
-pip install -r requirements.txt
+pip install -r assets/requirements.txt
 ```
 
 3. Given that the data lies in the `data/` directory, generate summary statistics by:
