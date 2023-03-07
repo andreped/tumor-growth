@@ -48,6 +48,7 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
     #  for each time point). Use cohort volumes quality to catch all patients and time points
     data = []
     unique_patients = np.asarray(filtered_volumes["OP_ID"].drop_duplicates())
+    print("Number of unique patients originally:", len(unique_patients))
 
     iter = 0
     for pat in tqdm(unique_patients, "Extracting volume info per patient"):
@@ -150,6 +151,9 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
     full_data["Clusters_total"] = data[:, -10]
     full_data["Relative_Volume_Change"] = data[:, -11].astype("float32")
 
+    unique_patients = np.asarray(full_data["Patient"].drop_duplicates())
+    print("Number of unique patients in full_data:", len(unique_patients))
+
     # initialize NaN rows in pandas dataframe for Volume data, which will be added
     full_data["Dim1"] = (np.nan * np.ones(full_data.shape[0]))
     full_data["Dim2"] = (np.nan * np.ones(full_data.shape[0]))
@@ -222,10 +226,16 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
         full_data.loc[row_id[0], "Manufacturer"] = manufacturer
         full_data.loc[row_id[0], "Model_Name"] = model_name
         full_data.loc[row_id[0], "Tesla"] = float(tesla)
+    
+    unique_patients = np.asarray(full_data["Patient"].drop_duplicates())
+    print("Number of unique patients in full_data before removing Volume=0:", len(unique_patients))
 
     # need to filter NaN volumes on merged data frame
     # remove all occurences where Volumes=0 (not possible -> tumor was not annotated)
     full_data_nonzero = full_data[full_data.Volume != 0]
+
+    unique_patients = np.asarray(full_data_nonzero["Patient"].drop_duplicates())
+    print("Number of unique patients in full_data_nonzero AFTER removing Volume=0:", len(unique_patients))
 
     # after filtering, we need to reset indices in full_data to go 0:1:N
     full_data_nonzero.index = list(range(len(full_data_nonzero)))
