@@ -3,11 +3,7 @@ cls
 clear
 
 // load data from CSV
-. import delimited "/Users/andreped/workspace/tumor-growth/data/merged_longitudinal_data_090123.csv"
-
-// replace -999 with . for relevant vectors
-replace t2 = . if t2 == -999
-replace oedema = . if oedema == -999
+. import delimited "/Users/andreped/workspace/tumor-growth/data/fused_dataset_growth_analysis_070323_remove-surgery_False_remove-missing_True.csv"
 
 // convert string variable genders to categorical variable
 encode patient, generate(patient_n)
@@ -18,7 +14,7 @@ gen log_volume = log(volume)
 ** Linear regression **
 menl volume = {U0[patient_n]} + {xb:}, ///
 	define(xb: i.gender_bin i.multifocality i.oedema i.t2 ///
-	follow_up_months initial_volume current_age_years)
+	follow_up_months initial_volume initial_age)
 	
 estat ic
 
@@ -26,7 +22,7 @@ estat ic
 ** Exponential regression **
 menl log_volume = {U0[patient_n]} + {xb:}, ///
 	define(xb: i.gender_bin i.multifocality i.oedema i.t2 ///
-	follow_up_months initial_volume current_age_years)
+	follow_up_months initial_volume initial_age)
 
 estat ic
 
@@ -37,7 +33,7 @@ estat ic
 ** Linear radial growth regression **
 menl log_volume = {U[patient_n]} + log(4 * c(pi) / 3) + 3 * log({xb:}), ///
 	define(xb: i.gender_bin i.multifocality i.oedema i.t2 ///
-	follow_up_months initial_volume current_age_years)
+	follow_up_months initial_volume initial_age)
 	
 estat ic
 
@@ -45,7 +41,7 @@ estat ic
 ** Gompertzian regression **
 menl log_volume = {U0[patient_n]} + log({a0}) - exp(-{xb:}), ///
 	define(xb: i.gender_bin i.multifocality i.oedema i.t2 ///
-	follow_up_months initial_volume current_age_years)
+	follow_up_months initial_volume initial_age)
 
 estat ic
 
