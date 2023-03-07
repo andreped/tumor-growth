@@ -1,13 +1,14 @@
 import pandas as pd
 import numpy as np
 import os
+from tqdm import tqdm
 from scipy import stats
 from argparse import ArgumentParser
 from utils import sort_timestamps, remove_surgery_patients, str2datetime, get_earliest_timestamp,\
     get_last_timestamp
 
 
-def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=False):
+def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=False, remove_missing:bool=False):
     cohort_personal_info = pd.read_csv(os.path.join(data_path, "cohort_personal_info.csv"))
     cohort_volumes_quality = pd.read_csv(os.path.join(data_path, "cohort_volumes_quality-filtered.csv"))
     volumes = pd.read_csv(os.path.join(data_path, "volumes.csv"))
@@ -46,9 +47,10 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
     # 1) First assumption (lets sum all fragmented tumors together into one - total tumor volume in patient,
     #  for each time point). Use cohort volumes quality to catch all patients and time points
     data = []
-    unique_patients = np.unique(list(filtered_volumes["OP_ID"]))
+    unique_patients = np.asarray(filtered_volumes["OP_ID"].drop_duplicates())
+
     iter = 0
-    for pat in unique_patients:
+    for pat in tqdm(unique_patients, "Extracting volume info per patient"):
         # get all data for current patient
         curr_data = filtered_volumes[filtered_volumes["OP_ID"] == pat]
 
@@ -132,8 +134,10 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
     data = np.array(data)
 
     # merge this with the cohort volumes quality stuff
-    full_data = filtered_cohort_volumes_quality.copy()
+    full_data = pd.DataFrame()
 
+    full_data["Patient"] = data[:, 0]
+    full_data["Timestamp"] = data[:, 1]
     full_data["Volume"] = data[:, -1].astype("float32")
     full_data["Date"] = data[:, -2]
     full_data["Last_Timestamp_Date"] = data[:, -3]
@@ -146,17 +150,42 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
     full_data["Clusters_total"] = data[:, -10]
     full_data["Relative_Volume_Change"] = data[:, -11].astype("float32")
 
-    # need to filter NaN volumes on merged data frame
-    full_data = full_data[full_data.Volume != 0]
+    # initialize NaN rows in pandas dataframe for Volume data, which will be added
+    full_data["Dim1"] = (np.nan * np.ones(full_data.shape[0]))
+    full_data["Dim2"] = (np.nan * np.ones(full_data.shape[0]))
+    full_data["Dim3"] = (np.nan * np.ones(full_data.shape[0]))
+    full_data["Spacing1"] = (np.nan * np.ones(full_data.shape[0]))
+    full_data["Spacing2"] = (np.nan * np.ones(full_data.shape[0]))
+    full_data["Spacing3"] = (np.nan * np.ones(full_data.shape[0]))
+    
+    # cannot simply stitch the two data arrays side by side, I will need to query
+    # the (Patient, Timestamp) pairs
+    for i in tqdm(range(full_data.shape[0]), "Adding Quality info"):
+        curr_row = full_data.loc[i]
+        
+        curr_pat = str(curr_row["Patient"])
+        curr_timestamp = str(curr_row["Timestamp"])
 
-    # reset indices in full_data to go 0:1:N
-    full_data.index = list(range(len(full_data)))
+        filter_ = (filtered_cohort_volumes_quality["Patient"] == curr_pat) & (filtered_cohort_volumes_quality["Timestamp"] == curr_timestamp)
+
+        if sum(filter_) != 1:
+            print(sum(filter_))
+            raise ValueError("More than one pat,ts pair matches between the two CSV files! Something is wrong!")
+
+        # query Volumes dataframe to find the patient + Timestamp pair
+        row_id = np.where(filter_)[0][0]
+        full_data.loc[i, "Dim1"] = filtered_cohort_volumes_quality.loc[row_id, "Dim1"]
+        full_data.loc[i, "Dim2"] = filtered_cohort_volumes_quality.loc[row_id, "Dim2"]
+        full_data.loc[i, "Dim3"] = filtered_cohort_volumes_quality.loc[row_id, "Dim3"]
+        full_data.loc[i, "Spacing1"] = filtered_cohort_volumes_quality.loc[row_id, "Spacing1"]
+        full_data.loc[i, "Spacing2"] = filtered_cohort_volumes_quality.loc[row_id, "Spacing2"]
+        full_data.loc[i, "Spacing3"] = filtered_cohort_volumes_quality.loc[row_id, "Spacing3"]
 
     # add patient characteristics to full data frame
-    full_data["Birth_Year"] = (-999 * np.ones(full_data.shape[0])).astype("str")
-    full_data["Gender"] = (-999 * np.ones(full_data.shape[0])).astype("str")
-    for pat, gender, byear in zip(cohort_personal_info_filtered["Patient"], cohort_personal_info_filtered["Gender"],
-                                  cohort_personal_info_filtered["Birth_Year"]):
+    full_data["Birth_Year"] = (np.nan * np.ones(full_data.shape[0]))
+    full_data["Gender"] = (np.nan * np.ones(full_data.shape[0]))
+    for pat, gender, byear in tqdm(zip(cohort_personal_info_filtered["Patient"], cohort_personal_info_filtered["Gender"],
+                                  cohort_personal_info_filtered["Birth_Year"]), "Adding patient info", total=len(cohort_personal_info_filtered["Patient"])):
         row_ids = np.where(full_data["Patient"] == pat)[0]
         for r in row_ids:
             byear_new_format = str(byear) + "-07-01"
@@ -170,9 +199,9 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
     full_data["Gender_bin"].replace(["woman", "man"], [0, 1], inplace=True)
 
     # add T2 and oedema information to full data frame
-    full_data["T2"] = (-999 * np.ones(full_data.shape[0])).astype("str")
-    full_data["Oedema"] = (-999 * np.ones(full_data.shape[0])).astype("str")
-    for patient in filtered_t2_oedema["Patient"]:
+    full_data["T2"] = (np.nan * np.ones(full_data.shape[0]))
+    full_data["Oedema"] = (np.nan * np.ones(full_data.shape[0]))
+    for patient in tqdm(filtered_t2_oedema["Patient"], "Adding T2 and Oedema info"):
         row_ids = np.where(full_data["Patient"] == patient)[0]
         curr = filtered_t2_oedema[filtered_t2_oedema["Patient"] == patient]
         for r in row_ids:
@@ -180,10 +209,10 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
             full_data.loc[r, "Oedema"] = np.array(curr["peritumorial_oedema"])
 
     # add scanner info to the full data frame
-    full_data["Manufacturer"] = (np.nan * np.ones(full_data.shape[0])).astype("str")
-    full_data["Model_Name"] = (np.nan * np.ones(full_data.shape[0])).astype("str")
+    full_data["Manufacturer"] = (np.nan * np.ones(full_data.shape[0])).astype(str)
+    full_data["Model_Name"] = (np.nan * np.ones(full_data.shape[0])).astype(str)
     full_data["Tesla"] = (np.nan * np.ones(full_data.shape[0]))
-    for i in range(len(scanner_info)):
+    for i in tqdm(range(len(scanner_info)), "Adding scanner info"):
         patient, timestamp, manufacturer, model_name, tesla = scanner_info.loc[i]
         row_id = np.where((full_data["Patient"] == patient) & (full_data["Timestamp"] == timestamp))[0]
 
@@ -194,14 +223,33 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
         full_data.loc[row_id[0], "Model_Name"] = model_name
         full_data.loc[row_id[0], "Tesla"] = float(tesla)
 
+    # need to filter NaN volumes on merged data frame
     # remove all occurences where Volumes=0 (not possible -> tumor was not annotated)
-    filter_zero_volumes = full_data["Volume"] != str(0.0)
-    full_data_nonzero = full_data[filter_zero_volumes]
+    full_data_nonzero = full_data[full_data.Volume != 0]
+
+    # after filtering, we need to reset indices in full_data to go 0:1:N
+    full_data_nonzero.index = list(range(len(full_data_nonzero)))
+
+    # remove all occurences where Volumes=0 (not possible -> tumor was not annotated)
+    #filter_zero_volumes = full_data["Volume"] != str(0.0)
+    #full_data_nonzero = full_data[filter_zero_volumes]
 
     # get current age at scan and add to data frame
     curr_age_at_scan = full_data_nonzero["Date"] - full_data_nonzero["Birth_Year"]
     curr_age_at_scan = curr_age_at_scan.dt.days
     full_data_nonzero["Current_Age"] = curr_age_at_scan.astype(float)
+    full_data_nonzero["Current_Age_Years"] = np.array(full_data_nonzero["Current_Age"]).astype("float32") / 365.25
+
+    # get age at initial/earliest scan
+    full_data_nonzero["Initial_Age"] = (np.nan * np.ones(full_data_nonzero.shape[0]))
+    unique_patients = np.asarray(full_data_nonzero["Patient"].drop_duplicates())
+    for pat in tqdm(unique_patients, "Adding initial age info"):
+        curr_pat_filter = full_data_nonzero["Patient"] == pat
+        curr = full_data_nonzero[curr_pat_filter]
+        curr_row = np.where(np.array(curr["Earliest_Timestamp"]) == 1)[0]
+        initial_age = float(curr.iloc[curr_row]["Current_Age_Years"])
+        
+        full_data_nonzero.loc[curr_pat_filter, "Initial_Age"] = initial_age
 
     # get relative difference in days between scans
     relative_difference_between_scans = full_data_nonzero["Date"] - full_data_nonzero["First_Timestamp_Date"]
@@ -231,11 +279,6 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
     print("-> All current patients have >= 3 timestamps with tumour volume > 0")
 
     # create summary statistics for study - Table 1
-    full_data_nonzero["Current_Age_Years"] = np.array(full_data_nonzero["Current_Age"]).astype("float32") / 365.25
-
-    # write current DataFrame to disk in the CSV format
-    if export_csv:
-        full_data_nonzero.to_csv(os.path.join(data_path, "merged_longitudinal_data_060323.csv"))
 
     # patient_filter_ = full_data_nonzero["Timestamp"] == "T1"
     # @TODO: After removing volumes with 0 size, some T1 points are now missing (FIXED BELOW)
@@ -252,15 +295,13 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
     number_of_mri_scans = np.array(full_data_nonzero["Number_Of_Timestamps"][patient_filter_])
     slice_thickness = np.array(full_data_nonzero["Spacing3"][patient_filter_])
 
-    t2_hyperintense_orig = np.array(full_data_nonzero["T2"][patient_filter_])
-    t2_hyperintense_orig[t2_hyperintense_orig == '-999.0'] = np.nan
-    t2_hyperintense = t2_hyperintense_orig[~pd.isnull(t2_hyperintense_orig)]
-    t2_hyperintense = np.array([int(x) for x in t2_hyperintense])
+    t2_hyperintense_orig = full_data_nonzero["T2"][patient_filter_]
+    t2_hyperintense = t2_hyperintense_orig.replace('nan', np.nan)
+    t2_hyperintense = np.asarray(t2_hyperintense.dropna()).astype(int)
 
-    oedema_orig = np.array(full_data_nonzero["Oedema"][patient_filter_])
-    oedema_orig[oedema_orig == "-999.0"] = np.nan
-    oedema = oedema_orig[~pd.isnull(oedema_orig)]
-    oedema = np.array([int(x) for x in oedema])
+    oedema_orig = full_data_nonzero["Oedema"][patient_filter_]
+    oedema = oedema_orig.replace('nan', np.nan)
+    oedema = np.asarray(oedema.dropna()).astype(int)
 
     earliest_timestamp_filter = np.array(full_data_nonzero["Earliest_Timestamp"] == 1)
     init_volume_size = np.array(full_data_nonzero["Volume"][earliest_timestamp_filter])
@@ -383,19 +424,33 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
         "volume_change_categorical": volume_change_categorical,
     })
 
+    # remove rows with missing values
+    if remove_missing:
+        # remove Model_Name from dataframe for convenience
+        before = full_data_nonzero.shape
+        full_data_nonzero = full_data_nonzero.drop("Model_Name", axis=1)
+        full_data_nonzero = full_data_nonzero.drop("Manufacturer", axis=1)
+        full_data_nonzero = full_data_nonzero.replace("nan", np.nan)
+        full_data_nonzero = full_data_nonzero.dropna()
+        full_data_nonzero.index = list(range(len(full_data_nonzero)))
+        print("DataFrame shape before/after dropna() + remove Model_Name + Manufacturer column:", before, full_data_nonzero.shape)
+
     # save processed data frame as CSV on disk
     if export_csv:
-        df_association.to_csv(os.path.join(
-            data_path, "merged_processed_regression_data_060323_remove_surgery_" + str(remove_surgery) + ".csv")
+        full_data_nonzero.to_csv(os.path.join(
+            data_path, "fused_dataset_growth_analysis_070323_remove-surgery_"
+             + str(remove_surgery) + "_remove-missing_" + str(remove_missing) + ".csv")
         )
 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("-r", "--remove-surgery", action='store_true',
+    parser.add_argument("-rs", "--remove-surgery", action='store_true',
                         help="Whether to remove patients that had surgery.")
-    parser.add_argument("-e", "--export-csv", action='store_true',
+    parser.add_argument("-ex", "--export-csv", action='store_true',
                         help="Whether to export generated tables as CSVs.")
+    parser.add_argument("-rm", "--remove-missing", action="store_true",
+                        help="Whether to remove missing values or not before exporting CSV.")
     args = parser.parse_args()
     print("arguments:", args)
 
@@ -404,6 +459,6 @@ if __name__ == "__main__":
     if not os.path.isdir(data_path):
         raise ValueError("data/ directory was not found. Please, ensure that the data/ directory is placed at the same level as src/.")
 
-    preprocess(data_path=data_path, remove_surgery=args.remove_surgery, export_csv=args.export_csv)
+    preprocess(data_path=data_path, remove_surgery=args.remove_surgery, export_csv=args.export_csv, remove_missing=args.remove_missing)
 
     print("Finished!")
