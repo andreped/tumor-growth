@@ -4,8 +4,41 @@ import os
 from tqdm import tqdm
 from scipy import stats
 from argparse import ArgumentParser
-from utils import sort_timestamps, remove_surgery_patients, str2datetime, get_earliest_timestamp,\
-    get_last_timestamp
+from utils import sort_timestamps, remove_surgery_patients, str2datetime,\
+    get_earliest_timestamp, get_last_timestamp, BCa_interval
+
+
+def margins_of_error(data_path:str=None):
+    data = pd.read_csv(os.path.join(data_path, "interrater_variability_study.csv"))
+
+    print(data)
+
+    # remove patients with 0 Dice
+    #data = data[data["Dice"] != 0]
+
+    print(len(data))
+
+    #dice = data["Dice"]
+
+    raw = data["Raw volume"]
+    per = data["Per volume"]
+
+    error = np.abs(per - raw) / raw
+
+    # error = 1 - dice
+
+    print(np.median(error), stats.iqr(error))
+    print(np.mean(error), np.std(error))
+
+    #lim = np.std(error) * 1.95 / np.sqrt(len(error))
+    #print(np.mean(error) - lim, np.mean(error) + lim)
+
+    # find quantiles based data
+    ci, theta_hat = BCa_interval(
+        np.asarray(error), func=lambda x: np.mean(x), B=10000, q=0.975
+    )
+
+    print(ci)
 
 
 def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=False, remove_missing:bool=False):
@@ -469,6 +502,8 @@ if __name__ == "__main__":
     if not os.path.isdir(data_path):
         raise ValueError("data/ directory was not found. Please, ensure that the data/ directory is placed at the same level as src/.")
 
-    preprocess(data_path=data_path, remove_surgery=args.remove_surgery, export_csv=args.export_csv, remove_missing=args.remove_missing)
+    #preprocess(data_path=data_path, remove_surgery=args.remove_surgery, export_csv=args.export_csv, remove_missing=args.remove_missing)
+
+    margins_of_error(data_path=data_path)
 
     print("Finished!")
