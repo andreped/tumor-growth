@@ -11,27 +11,13 @@ from utils import sort_timestamps, remove_surgery_patients, str2datetime,\
 def margins_of_error(data_path:str=None):
     data = pd.read_csv(os.path.join(data_path, "interrater_variability_study.csv"))
 
-    print(data)
-
-    # remove patients with 0 Dice
-    #data = data[data["Dice"] != 0]
-
-    print(len(data))
-
-    #dice = data["Dice"]
-
     raw = data["Raw volume"]
     per = data["Per volume"]
 
     error = np.abs(per - raw) / raw
 
-    # error = 1 - dice
-
     print(np.median(error), stats.iqr(error))
     print(np.mean(error), np.std(error))
-
-    #lim = np.std(error) * 1.95 / np.sqrt(len(error))
-    #print(np.mean(error) - lim, np.mean(error) + lim)
 
     # find quantiles based data
     ci, theta_hat = BCa_interval(
@@ -519,6 +505,6 @@ if __name__ == "__main__":
         remove_multifocal=args.remove_multifocal
     )
 
-    #margins_of_error(data_path=data_path)
+    margins_of_error(data_path=data_path)
 
     print("Finished!")
