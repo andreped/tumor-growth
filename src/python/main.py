@@ -41,7 +41,7 @@ def margins_of_error(data_path:str=None):
     print(ci)
 
 
-def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=False, remove_missing:bool=False):
+def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=False, remove_missing:bool=False, remove_multifocal:bool=False):
     cohort_personal_info = pd.read_csv(os.path.join(data_path, "cohort_personal_info.csv"))
     cohort_volumes_quality = pd.read_csv(os.path.join(data_path, "cohort_volumes_quality-filtered.csv"))
     volumes = pd.read_csv(os.path.join(data_path, "volumes.csv"))
@@ -477,12 +477,19 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
         full_data_nonzero = full_data_nonzero.dropna()
         full_data_nonzero.index = list(range(len(full_data_nonzero)))
         print("DataFrame shape before/after dropna() + remove Model_Name + Manufacturer column:", before, full_data_nonzero.shape)
+    
+    # remove rows/patients with multifocal tumors
+    if remove_multifocal:
+        before = full_data_nonzero.shape
+        full_data_nonzero = full_data_nonzero[full_data_nonzero["Multifocality"] == 0]  # ignore 1 -> multifocal tumor occured in patient
+        print("Dataframe shape before/after removing multifocal tumors:", before, full_data_nonzero.shape)
 
     # save processed data frame as CSV on disk
     if export_csv:
         full_data_nonzero.to_csv(os.path.join(
-            data_path, "fused_dataset_growth_analysis_070323_remove-surgery_"
-             + str(remove_surgery) + "_remove-missing_" + str(remove_missing) + ".csv")
+            data_path, "fused_dataset_growth_analysis_remove-surgery_" + \
+             str(remove_surgery) + "_remove-missing_" + str(remove_missing) + \
+             "_remove_multifocal_" + str(remove_multifocal) + ".csv")
         )
 
 
@@ -494,6 +501,8 @@ if __name__ == "__main__":
                         help="Whether to export generated tables as CSVs.")
     parser.add_argument("-rm", "--remove-missing", action="store_true",
                         help="Whether to remove missing values or not before exporting CSV.")
+    parser.add_argument("-rf", "--remove-multifocal", action="store_true",
+                        help="Whether to remove patients with multifocal tumors before exporting CSV.")
     args = parser.parse_args()
     print("arguments:", args)
 
@@ -502,8 +511,14 @@ if __name__ == "__main__":
     if not os.path.isdir(data_path):
         raise ValueError("data/ directory was not found. Please, ensure that the data/ directory is placed at the same level as src/.")
 
-    #preprocess(data_path=data_path, remove_surgery=args.remove_surgery, export_csv=args.export_csv, remove_missing=args.remove_missing)
+    preprocess(
+        data_path=data_path,
+        remove_surgery=args.remove_surgery,
+        export_csv=args.export_csv,
+        remove_missing=args.remove_missing,
+        remove_multifocal=args.remove_multifocal
+    )
 
-    margins_of_error(data_path=data_path)
+    #margins_of_error(data_path=data_path)
 
     print("Finished!")
