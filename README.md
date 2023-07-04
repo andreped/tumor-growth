@@ -37,7 +37,7 @@ source venv/bin/activate
 
 2. Install Python dependencies:
 ```
-pip install -r assets/requirements.txt
+pip install -r requirements.txt
 ```
 
 3. Given that the data lies in the `data/` directory, generate summary statistics by:
