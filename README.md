@@ -1,5 +1,5 @@
 # tumor-growth
-This project contains the source code relevant for the study titled _"Growth patterns of meningiomas followed by repeated MRI scans"_.
+This project contains the source code relevant for the study titled _"Growth dynamics of untreated meningiomas"_.
 
 ## Implementation setup
 The initial statistical analysis was performed in Python 3.7.9 on macOS (12.6 Monterey) using the following libraries:
@@ -28,6 +28,7 @@ The source code in this project expects some structure on the data, and was tail
 Note that the CSV files under `data/` are not provided as this dataset is not made public.
 
 ## Perform experiments
+
 1. Setup Python virtual environment and activate it:
 ```
 virtualenv -ppython3 venv --clear
