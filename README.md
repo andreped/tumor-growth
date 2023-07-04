@@ -1,7 +1,7 @@
 # tumor-growth
 This project contains the source code relevant for the study titled _"Growth dynamics of untreated meningiomas"_.
 
-## Implementation setup
+## Setup
 The initial statistical analysis was performed in Python 3.7.9 on macOS (12.6 Monterey) using the following libraries:
 * [pandas==1.3.5](https://pypi.org/project/pandas/1.3.5/)
 * [scipy==1.7.3](https://pypi.org/project/scipy/1.7.3/)
@@ -27,7 +27,7 @@ The source code in this project expects some structure on the data, and was tail
 
 Note that the CSV files under `data/` are not provided as this dataset is not made public.
 
-## Perform experiments
+## Analysis
 
 1. Setup Python virtual environment and activate it:
 ```
@@ -42,7 +42,9 @@ pip install -r assets/requirements.txt
 
 3. Given that the data lies in the `data/` directory, generate summary statistics by:
 ```
-python src/python/main.py
+python src/python/main.py --remove-missing --export-csv
 ```
+
+The script support different arguments. Run `python src/python/main.py --help` to which arguments are available.
 
 4. Finally, perform growth curve modelling in Stata using the DO-file that lies [here](src/stata/curve_fitting.do).
