@@ -3,7 +3,7 @@ cls
 clear
 
 // load data from CSV
-. import delimited "/Users/andreped/workspace/tumor-growth/data/fused_dataset_growth_analysis_070323_remove-surgery_False_remove-missing_True.csv"
+. import delimited "/Users/andreped/workspace/tumor-growth/data/fused_dataset_growth_analysis_remove-surgery_False_remove-missing_True_remove_multifocal_True.csv"
 
 // convert string variable genders to categorical variable
 encode patient, generate(patient_n)
