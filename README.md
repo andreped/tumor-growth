@@ -45,6 +45,6 @@ pip install -r requirements.txt
 python src/python/main.py --remove-missing --export-csv
 ```
 
-The script support different arguments. Run `python src/python/main.py --help` to which arguments are available.
-
 4. Finally, perform growth curve modelling in Stata using the DO-file that lies [here](src/stata/curve_fitting.do).
+
+Note that the `main.py` script support various arguments. Run `python src/python/main.py --help` to which arguments are available.
