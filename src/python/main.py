@@ -96,7 +96,6 @@ def preprocess(data_path:str=None, remove_surgery:bool=False, export_csv:bool=Fa
             tmp = curr_data[curr_data["Timestamp"] == t]
             curr_v = np.array(tmp["Volume"]).astype("float32")
             curr_v = sum(curr_v)
-            #if not pd.isnull(curr_v):
             if (curr_v != 0) and not pd.isnull(curr_v):
                 break
         last_timestamp = t
