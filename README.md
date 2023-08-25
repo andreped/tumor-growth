@@ -1,4 +1,7 @@
 # [tumor-growth](https://github.com/andreped/tumor-growth#tumor-growth)
+
+[![license](https://img.shields.io/github/license/DAVFoundation/captain-n3m0.svg?style=flat-square)](https://github.com/DAVFoundation/captain-n3m0/blob/master/LICENSE)
+
 This project contains the source code relevant for the study titled _"Growth dynamics of untreated meningiomas"_.
 
 The manuscript has been submitted to a journal and is currently under peer review.
