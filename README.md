@@ -1,16 +1,16 @@
-# tumor-growth
+# [tumor-growth](https://github.com/andreped/tumor-growth#tumor-growth)
 This project contains the source code relevant for the study titled _"Growth dynamics of untreated meningiomas"_.
 
 The manuscript has been submitted to a journal and is currently under peer review.
 
-## Setup
+## [Setup](https://github.com/andreped/tumor-growth#setup)
 The initial statistical analysis was performed in Python 3.7.9 on macOS (12.6 Monterey) using the following libraries:
 * [pandas==1.3.5](https://pypi.org/project/pandas/1.3.5/)
 * [scipy==1.7.3](https://pypi.org/project/scipy/1.7.3/)
 
 The growth analysis was performed using [Stata/MP 17](https://www.stata.com/statamp/) using the [menl](https://www.stata.com/manuals/memenl.pdf) library.
 
-## Project structure
+## [Project structure](https://github.com/andreped/tumor-growth#project-structure)
 The source code in this project expects some structure on the data, and was tailored for this application and not meant to generalize to new datasets and applications.
 
     └── tumor-growth/
@@ -29,7 +29,7 @@ The source code in this project expects some structure on the data, and was tail
 
 Note that the CSV files under `data/` are not provided as this dataset is not made public.
 
-## Analysis
+## [Analysis](https://github.com/andreped/tumor-growth#analysis)
 
 1. Setup Python virtual environment and activate it:
 ```
@@ -50,3 +50,11 @@ python src/python/main.py --remove-missing --export-csv
 4. Finally, perform growth curve modelling in Stata using the DO-file that lies [here](src/stata/curve_fitting.do).
 
 Note that the `main.py` script support various arguments. Run `python src/python/main.py --help` to which arguments are available.
+
+## [License](https://github.com/andreped/tumor-growth#license)
+
+The code in this repository is released under [MIT license](https://github.com/andreped/tumor-growth/blob/main/LICENSE).
+
+## [Citation](https://github.com/andreped/tumor-growth#citation)
+
+A bibtex will be added here when the paper is published.
