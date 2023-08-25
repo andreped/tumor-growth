@@ -1,6 +1,8 @@
 # tumor-growth
 This project contains the source code relevant for the study titled _"Growth dynamics of untreated meningiomas"_.
 
+The manuscript has been submitted to a journal and is currently under peer review.
+
 ## Setup
 The initial statistical analysis was performed in Python 3.7.9 on macOS (12.6 Monterey) using the following libraries:
 * [pandas==1.3.5](https://pypi.org/project/pandas/1.3.5/)
