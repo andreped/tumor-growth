@@ -51,6 +51,8 @@ python src/python/main.py --remove-missing --export-csv
 
 Note that the `main.py` script support various arguments. Run `python src/python/main.py --help` to which arguments are available.
 
+To activate the virtual environment on Windows, instead of `source venv/bin/activate` run `./venv/Scripts/activate`.
+
 ## [License](https://github.com/andreped/tumor-growth#license)
 
 The code in this repository is released under [MIT license](https://github.com/andreped/tumor-growth/blob/main/LICENSE).
