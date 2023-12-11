@@ -2,9 +2,7 @@
 
 [![license](https://img.shields.io/github/license/DAVFoundation/captain-n3m0.svg?style=flat-square)](https://github.com/DAVFoundation/captain-n3m0/blob/master/LICENSE)
 
-This project contains the source code relevant for the study titled _"Growth dynamics of untreated meningiomas"_.
-
-The manuscript has been submitted to a journal and is currently under peer review.
+This project contains the source code relevant for the study titled _"Growth dynamics of untreated meningiomas"_ accepted for publication in [Neuro-Oncology Advances](https://academic.oup.com/noa).
 
 ## [Setup](https://github.com/andreped/tumor-growth#setup)
 The initial statistical analysis was performed in Python 3.7.9 on macOS (12.6 Monterey) using the following libraries:
