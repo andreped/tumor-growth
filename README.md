@@ -73,4 +73,18 @@ The code in this repository is released under [MIT license](https://github.com/a
 
 ## [Citation](https://github.com/andreped/tumor-growth#citation)
 
-A bibtex will be added here when the paper is published.
+If you found our research article or this repository relevant in your research, consider citing our paper:
+
+```
+@article{10.1093/noajnl/vdad157,
+    title = {{Growth dynamics of untreated meningiomas}},
+    author = {Strand, Per Sveino and Wågø, Kathrine Jørgensen and Pedersen, André and Reinertsen, Ingerid and Nälsund, Olivia and Jakola, Asgeir Store and Bouget, David and Hosainey, Sayied Abdol Mohieb and Sagberg, Lisa Millgård and Vanel, Johanna and Solheim, Ole},
+    journal = {Neuro-Oncology Advances},
+    pages = {vdad157},
+    year = {2023},
+    month = {12},
+    issn = {2632-2498},
+    doi = {10.1093/noajnl/vdad157},
+    url = {https://doi.org/10.1093/noajnl/vdad157},
+}
+```
